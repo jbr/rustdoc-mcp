@@ -151,11 +151,6 @@ impl RustdocData {
         self.crate_data.index.get(id)
     }
 
-    /// Get the root item
-    pub fn root_item(&self) -> Option<&Item> {
-        self.get_item(&self.crate_data.root)
-    }
-
     /// List all items of a specific kind
     pub fn items_by_kind(&self, kind: &str) -> Vec<(&Id, &Item)> {
         self.crate_data
@@ -180,20 +175,6 @@ impl RustdocData {
             .collect()
     }
 
-    /// Get all available item kinds in this crate
-    pub fn available_kinds(&self) -> Vec<String> {
-        let mut kinds: Vec<String> = self
-            .crate_data
-            .index
-            .values()
-            .map(|item| item.inner.kind_name().to_string())
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
-        kinds.sort();
-        kinds
-    }
-
     /// Get summary statistics about item kinds
     pub fn kind_statistics(&self) -> HashMap<String, usize> {
         let mut stats = HashMap::new();
@@ -202,15 +183,6 @@ impl RustdocData {
             *stats.entry(kind).or_insert(0) += 1;
         }
         stats
-    }
-
-    /// Get items that are publicly visible
-    pub fn public_items(&self) -> Vec<(&Id, &Item)> {
-        self.crate_data
-            .index
-            .iter()
-            .filter(|(_, item)| matches!(item.visibility, rustdoc_types::Visibility::Public))
-            .collect()
     }
 }
 

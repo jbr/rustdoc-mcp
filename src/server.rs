@@ -1,9 +1,14 @@
-use anyhow::{Result, anyhow};
-use serde_json::{Value, json};
+use anyhow::{anyhow, Result};
+use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 
-use crate::rustdoc::{ItemKind, RustdocProject};
+use crate::rustdoc::{ItemKind, RustdocData, RustdocProject};
+
+// Constants
+const TOOLS_SCHEMA: &str = include_str!("../tools_schema.json");
+const DEFAULT_SEARCH_LIMIT: usize = 20;
+const DEFAULT_LIST_LIMIT: usize = 50;
 
 /// MCP Server for rustdoc JSON data
 pub struct RustdocMcpServer {
@@ -54,29 +59,47 @@ impl RustdocMcpServer {
             Some("tools/list") => Ok(Some(self.handle_tools_list(&request).await?)),
             Some("tools/call") => Ok(Some(self.handle_tools_call(&request).await?)),
             Some("notifications/initialized") => Ok(None), // No response needed
-            Some(method) => {
-                let error_response = json!({
-                    "jsonrpc": "2.0",
-                    "id": request.get("id"),
-                    "error": {
-                        "code": -32601,
-                        "message": format!("Method not found: {}", method)
-                    }
-                });
-                Ok(Some(error_response.to_string()))
-            }
-            None => {
-                let error_response = json!({
-                    "jsonrpc": "2.0",
-                    "id": request.get("id"),
-                    "error": {
-                        "code": -32600,
-                        "message": "Invalid request: missing method"
-                    }
-                });
-                Ok(Some(error_response.to_string()))
-            }
+            Some(method) => Ok(Some(self.create_error_response(
+                &request,
+                -32601,
+                &format!("Method not found: {method}"),
+            ))),
+            None => Ok(Some(self.create_error_response(
+                &request,
+                -32600,
+                "Invalid request: missing method",
+            ))),
         }
+    }
+
+    /// Create a JSON-RPC error response
+    fn create_error_response(&self, request: &Value, code: i32, message: &str) -> String {
+        json!({
+            "jsonrpc": "2.0",
+            "id": request.get("id"),
+            "error": {
+                "code": code,
+                "message": message
+            }
+        })
+        .to_string()
+    }
+
+    /// Create a successful tool response
+    fn create_success_response(&self, request: &Value, content: &str) -> String {
+        json!({
+            "jsonrpc": "2.0",
+            "id": request.get("id"),
+            "result": {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": content
+                    }
+                ]
+            }
+        })
+        .to_string()
     }
 
     /// Handle the initialize request
@@ -100,140 +123,7 @@ impl RustdocMcpServer {
 
     /// Handle the tools/list request
     async fn handle_tools_list(&self, request: &Value) -> Result<String> {
-        let tools = vec![
-            json!({
-                "name": "set_project",
-                "description": "Set the cargo project root by pointing to Cargo.toml and list available crates",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "manifest_path": {
-                            "type": "string",
-                            "description": "Path to the Cargo.toml file"
-                        }
-                    },
-                    "required": ["manifest_path"]
-                }
-            }),
-            json!({
-                "name": "crate_info",
-                "description": "Get basic information about a crate",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "crate": {
-                            "type": "string",
-                            "description": "Name of the crate (optional, defaults to project root)"
-                        },
-                        "rebuild": {
-                            "type": "boolean",
-                            "description": "Rebuild documentation before querying (default: false)",
-                            "default": false
-                        }
-                    },
-                    "additionalProperties": false
-                }
-            }),
-            json!({
-                "name": "list_items_by_kind",
-                "description": "List all items of a specific kind (e.g., 'function', 'struct', 'trait')",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "kind": {
-                            "type": "string",
-                            "description": "The kind of items to list"
-                        },
-                        "crate": {
-                            "type": "string",
-                            "description": "Name of the crate (optional, defaults to project root)"
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of items to return (default: 50)",
-                            "default": 50
-                        },
-                        "rebuild": {
-                            "type": "boolean",
-                            "description": "Rebuild documentation before querying (default: false)",
-                            "default": false
-                        }
-                    },
-                    "required": ["kind"]
-                }
-            }),
-            json!({
-                "name": "search_items",
-                "description": "Search for items by name",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Search query (case-insensitive substring match)"
-                        },
-                        "crate": {
-                            "type": "string",
-                            "description": "Name of the crate (optional, defaults to project root)"
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of results to return (default: 20)",
-                            "default": 20
-                        },
-                        "rebuild": {
-                            "type": "boolean",
-                            "description": "Rebuild documentation before querying (default: false)",
-                            "default": false
-                        }
-                    },
-                    "required": ["query"]
-                }
-            }),
-            json!({
-                "name": "get_item_details",
-                "description": "Get detailed information about a specific item by ID",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "id": {
-                            "type": "string",
-                            "description": "The ID of the item to retrieve"
-                        },
-                        "crate": {
-                            "type": "string",
-                            "description": "Name of the crate (optional, defaults to project root)"
-                        },
-                        "rebuild": {
-                            "type": "boolean",
-                            "description": "Rebuild documentation before querying (default: false)",
-                            "default": false
-                        }
-                    },
-                    "required": ["id"]
-                }
-            }),
-            json!({
-                "name": "kind_statistics",
-                "description": "Get statistics about item kinds in a crate",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "crate": {
-                            "type": "string",
-                            "description": "Name of the crate (optional, defaults to project root)"
-                        },
-                        "rebuild": {
-                            "type": "boolean",
-                            "description": "Rebuild documentation before querying (default: false)",
-                            "default": false
-                        }
-                    },
-                    "additionalProperties": false
-                }
-            }),
-        ];
-
+        let tools: Value = serde_json::from_str(TOOLS_SCHEMA)?;
         let response = json!({
             "jsonrpc": "2.0",
             "id": request.get("id"),
@@ -244,7 +134,7 @@ impl RustdocMcpServer {
         Ok(response.to_string())
     }
 
-    /// Handle the tools/call request  
+    /// Handle the tools/call request
     async fn handle_tools_call(&self, request: &Value) -> Result<String> {
         let params = request
             .get("params")
@@ -262,33 +152,58 @@ impl RustdocMcpServer {
             "search_items" => self.handle_search_items(arguments).await,
             "get_item_details" => self.handle_get_item_details(arguments).await,
             "kind_statistics" => self.handle_kind_statistics(arguments).await,
-            _ => Err(anyhow!("Unknown tool: {}", name)),
+            _ => Err(anyhow!("Unknown tool: {name}")),
         };
 
-        let response = match result {
-            Ok(content) => json!({
-                "jsonrpc": "2.0",
-                "id": request.get("id"),
-                "result": {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": content
-                        }
-                    ]
-                }
-            }),
-            Err(e) => json!({
-                "jsonrpc": "2.0",
-                "id": request.get("id"),
-                "error": {
-                    "code": -32603,
-                    "message": format!("Tool execution failed: {}", e)
-                }
-            }),
-        };
+        match result {
+            Ok(content) => Ok(self.create_success_response(request, &content)),
+            Err(e) => Ok(self.create_error_response(
+                request,
+                -32603,
+                &format!("Tool execution failed: {e}"),
+            )),
+        }
+    }
 
-        Ok(response.to_string())
+    /// Extract common arguments from request
+    fn extract_common_args<'a>(&self, arguments: &'a Value) -> (Option<&'a str>, bool) {
+        let crate_name = arguments.get("crate").and_then(|c| c.as_str());
+        let rebuild = arguments
+            .get("rebuild")
+            .and_then(|r| r.as_bool())
+            .unwrap_or(false);
+        (crate_name, rebuild)
+    }
+
+    /// Resolve crate name to first available if not specified
+    fn resolve_crate_name<'a>(
+        &self,
+        project: &'a RustdocProject,
+        crate_name: Option<&'a str>,
+    ) -> &'a str {
+        crate_name.unwrap_or_else(|| {
+            project
+                .available_crates()
+                .first()
+                .map(|s| s.as_str())
+                .unwrap_or("unknown")
+        })
+    }
+
+    /// Handle crate loading with rebuild and common error handling
+    fn load_crate_with_rebuild(
+        &self,
+        project: &mut RustdocProject,
+        crate_name: Option<&str>,
+        rebuild: bool,
+    ) -> Result<(String, RustdocData)> {
+        if rebuild {
+            project.generate_docs(crate_name, true)?;
+        }
+
+        let resolved_crate_name = self.resolve_crate_name(project, crate_name);
+        let data = project.load_crate(resolved_crate_name)?;
+        Ok((resolved_crate_name.to_string(), data))
     }
 
     /// Set the cargo project
@@ -328,38 +243,21 @@ impl RustdocMcpServer {
 
     /// Get crate information
     async fn handle_crate_info(&self, arguments: Value) -> Result<String> {
-        let crate_name = arguments.get("crate").and_then(|c| c.as_str());
-        let rebuild = arguments
-            .get("rebuild")
-            .and_then(|r| r.as_bool())
-            .unwrap_or(false);
+        let (crate_name, rebuild) = self.extract_common_args(&arguments);
 
         self.with_project(|project| {
-            if rebuild {
-                project.generate_docs(crate_name, true)?;
-            }
-
-            let crate_name = crate_name.unwrap_or_else(|| {
-                // Default to the first available crate (usually the project root)
-                project
-                    .available_crates()
-                    .first()
-                    .map(|s| s.as_str())
-                    .unwrap_or("unknown")
-            });
-
-            let data = project.load_crate(crate_name)?;
+            let (resolved_crate_name, data) =
+                self.load_crate_with_rebuild(project, crate_name, rebuild)?;
             let info = data.crate_info();
 
             Ok(format!(
-                "Crate Information for '{}':\n\
+                "Crate Information for '{resolved_crate_name}':\n\
                  - Format version: {}\n\
                  - Crate version: {}\n\
                  - Includes private items: {}\n\
                  - Root ID: {}\n\
                  - Total items: {}\n\
                  - External crates: {}",
-                crate_name,
                 info.format_version,
                 info.crate_version.unwrap_or_else(|| "unknown".to_string()),
                 info.includes_private,
@@ -376,36 +274,21 @@ impl RustdocMcpServer {
             .get("kind")
             .and_then(|k| k.as_str())
             .ok_or_else(|| anyhow!("Missing kind argument"))?;
-        let crate_name = arguments.get("crate").and_then(|c| c.as_str());
+        let (crate_name, rebuild) = self.extract_common_args(&arguments);
         let limit = arguments
             .get("limit")
             .and_then(|l| l.as_u64())
-            .unwrap_or(50) as usize;
-        let rebuild = arguments
-            .get("rebuild")
-            .and_then(|r| r.as_bool())
-            .unwrap_or(false);
+            .unwrap_or(DEFAULT_LIST_LIMIT as u64) as usize;
 
         self.with_project(|project| {
-            if rebuild {
-                project.generate_docs(crate_name, true)?;
-            }
-
-            let crate_name = crate_name.unwrap_or_else(|| {
-                project
-                    .available_crates()
-                    .first()
-                    .map(|s| s.as_str())
-                    .unwrap_or("unknown")
-            });
-
-            let data = project.load_crate(crate_name)?;
+            let (resolved_crate_name, data) =
+                self.load_crate_with_rebuild(project, crate_name, rebuild)?;
             let items = data.items_by_kind(kind);
             let limited_items: Vec<_> = items.into_iter().take(limit).collect();
 
             if limited_items.is_empty() {
                 return Ok(format!(
-                    "No items found of kind '{kind}' in crate '{crate_name}'"
+                    "No items found of kind '{kind}' in crate '{resolved_crate_name}'"
                 ));
             }
 
@@ -413,17 +296,20 @@ impl RustdocMcpServer {
                 "Found {} items of kind '{}' in crate '{}':\n\n",
                 limited_items.len(),
                 kind,
-                crate_name
+                resolved_crate_name
             );
+
             for (id, item) in limited_items {
                 let name = item.name.as_deref().unwrap_or("<unnamed>");
                 let visibility = match item.visibility {
                     rustdoc_types::Visibility::Public => "pub",
                     _ => "private",
                 };
-                result.push_str(&format!("- {} {} (ID: {})\n", visibility, name, id.0));
-                if let Some(docs) = &item.docs
-                    && !docs.is_empty() {
+                result.push_str(&format!("- {visibility} {name} (ID: {})\n", id.0));
+
+                // Add documentation preview if available
+                if let Some(docs) = &item.docs {
+                    if !docs.is_empty() {
                         let preview = docs.lines().next().unwrap_or("");
                         let truncated = if preview.len() > 100 {
                             format!("{}...", &preview[..97])
@@ -432,6 +318,7 @@ impl RustdocMcpServer {
                         };
                         result.push_str(&format!("  // {truncated}\n"));
                     }
+                }
             }
             Ok(result)
         })
@@ -443,36 +330,21 @@ impl RustdocMcpServer {
             .get("query")
             .and_then(|q| q.as_str())
             .ok_or_else(|| anyhow!("Missing query argument"))?;
-        let crate_name = arguments.get("crate").and_then(|c| c.as_str());
+        let (crate_name, rebuild) = self.extract_common_args(&arguments);
         let limit = arguments
             .get("limit")
             .and_then(|l| l.as_u64())
-            .unwrap_or(20) as usize;
-        let rebuild = arguments
-            .get("rebuild")
-            .and_then(|r| r.as_bool())
-            .unwrap_or(false);
+            .unwrap_or(DEFAULT_SEARCH_LIMIT as u64) as usize;
 
         self.with_project(|project| {
-            if rebuild {
-                project.generate_docs(crate_name, true)?;
-            }
-
-            let crate_name = crate_name.unwrap_or_else(|| {
-                project
-                    .available_crates()
-                    .first()
-                    .map(|s| s.as_str())
-                    .unwrap_or("unknown")
-            });
-
-            let data = project.load_crate(crate_name)?;
+            let (resolved_crate_name, data) =
+                self.load_crate_with_rebuild(project, crate_name, rebuild)?;
             let items = data.search_items(query);
             let limited_items: Vec<_> = items.into_iter().take(limit).collect();
 
             if limited_items.is_empty() {
                 return Ok(format!(
-                    "No items found matching '{query}' in crate '{crate_name}'",
+                    "No items found matching '{query}' in crate '{resolved_crate_name}'"
                 ));
             }
 
@@ -480,8 +352,9 @@ impl RustdocMcpServer {
                 "Found {} items matching '{}' in crate '{}':\n\n",
                 limited_items.len(),
                 query,
-                crate_name
+                resolved_crate_name
             );
+
             for (id, item) in limited_items {
                 let name = item.name.as_deref().unwrap_or("<unnamed>");
                 let kind = item.inner.kind_name();
@@ -490,8 +363,8 @@ impl RustdocMcpServer {
                     _ => "private",
                 };
                 result.push_str(&format!(
-                    "- {} {} {} (ID: {})\n",
-                    visibility, kind, name, id.0
+                    "- {visibility} {kind} {name} (ID: {})\n",
+                    id.0
                 ));
             }
             Ok(result)
@@ -504,34 +377,20 @@ impl RustdocMcpServer {
             .get("id")
             .and_then(|i| i.as_str())
             .ok_or_else(|| anyhow!("Missing id argument"))?;
-        let crate_name = arguments.get("crate").and_then(|c| c.as_str());
-        let rebuild = arguments
-            .get("rebuild")
-            .and_then(|r| r.as_bool())
-            .unwrap_or(false);
+        let (crate_name, rebuild) = self.extract_common_args(&arguments);
 
         let id: u32 = id_str.parse().map_err(|_| anyhow!("Invalid ID format"))?;
         let item_id = rustdoc_types::Id(id);
 
         self.with_project(|project| {
-            if rebuild {
-                project.generate_docs(crate_name, true)?;
-            }
+            let (resolved_crate_name, data) =
+                self.load_crate_with_rebuild(project, crate_name, rebuild)?;
 
-            let crate_name = crate_name.unwrap_or_else(|| {
-                project
-                    .available_crates()
-                    .first()
-                    .map(|s| s.as_str())
-                    .unwrap_or("unknown")
-            });
-
-            let data = project.load_crate(crate_name)?;
             match data.get_item(&item_id) {
                 Some(item) => {
                     let mut result = String::new();
                     result.push_str(&format!(
-                        "Item Details in crate '{crate_name}' (ID: {id}):\n"
+                        "Item Details in crate '{resolved_crate_name}' (ID: {id}):\n"
                     ));
                     result.push_str(&format!(
                         "- Name: {}\n",
@@ -556,9 +415,7 @@ impl RustdocMcpServer {
                     Ok(result)
                 }
                 None => Err(anyhow!(
-                    "Item with ID {} not found in crate '{}'",
-                    id,
-                    crate_name
+                    "Item with ID {id} not found in crate '{resolved_crate_name}'"
                 )),
             }
         })
@@ -566,28 +423,13 @@ impl RustdocMcpServer {
 
     /// Get kind statistics
     async fn handle_kind_statistics(&self, arguments: Value) -> Result<String> {
-        let crate_name = arguments.get("crate").and_then(|c| c.as_str());
-        let rebuild = arguments
-            .get("rebuild")
-            .and_then(|r| r.as_bool())
-            .unwrap_or(false);
+        let (crate_name, rebuild) = self.extract_common_args(&arguments);
 
         self.with_project(|project| {
-            if rebuild {
-                project.generate_docs(crate_name, true)?;
-            }
-
-            let crate_name = crate_name.unwrap_or_else(|| {
-                project
-                    .available_crates()
-                    .first()
-                    .map(|s| s.as_str())
-                    .unwrap_or("unknown")
-            });
-
-            let data = project.load_crate(crate_name)?;
+            let (resolved_crate_name, data) =
+                self.load_crate_with_rebuild(project, crate_name, rebuild)?;
             let stats = data.kind_statistics();
-            let mut result = format!("Item Kind Statistics for crate '{crate_name}':\n\n");
+            let mut result = format!("Item Kind Statistics for crate '{resolved_crate_name}':\n\n");
 
             let mut sorted_stats: Vec<_> = stats.iter().collect();
             sorted_stats.sort_by(|a, b| b.1.cmp(a.1)); // Sort by count descending
