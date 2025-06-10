@@ -45,12 +45,14 @@ impl RustdocProject {
             let entry = entry?;
             let path = entry.path();
 
-            if let Some(extension) = path.extension()
-                && extension == "json"
-                && let Some(stem) = path.file_stem()
-                && let Some(crate_name) = stem.to_str()
-            {
-                self.available_crates.insert(crate_name.to_string(), path);
+            if let Some(extension) = path.extension() {
+                if extension == "json" {
+                    if let Some(stem) = path.file_stem() {
+                        if let Some(crate_name) = stem.to_str() {
+                            self.available_crates.insert(crate_name.to_string(), path);
+                        }
+                    }
+                }
             }
         }
 
