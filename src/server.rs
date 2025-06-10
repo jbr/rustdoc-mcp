@@ -1,5 +1,5 @@
-use anyhow::{anyhow, Result};
-use serde_json::{json, Value};
+use anyhow::{Result, anyhow};
+use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 
@@ -308,16 +308,16 @@ impl RustdocMcpServer {
                 result.push_str(&format!("- {visibility} {name} (ID: {})\n", id.0));
 
                 // Add documentation preview if available
-                if let Some(docs) = &item.docs {
-                    if !docs.is_empty() {
-                        let preview = docs.lines().next().unwrap_or("");
-                        let truncated = if preview.len() > 100 {
-                            format!("{}...", &preview[..97])
-                        } else {
-                            preview.to_string()
-                        };
-                        result.push_str(&format!("  // {truncated}\n"));
-                    }
+                if let Some(docs) = &item.docs
+                    && !docs.is_empty()
+                {
+                    let preview = docs.lines().next().unwrap_or("");
+                    let truncated = if preview.len() > 100 {
+                        format!("{}...", &preview[..97])
+                    } else {
+                        preview.to_string()
+                    };
+                    result.push_str(&format!("  // {truncated}\n"));
                 }
             }
             Ok(result)
@@ -362,17 +362,14 @@ impl RustdocMcpServer {
                     rustdoc_types::Visibility::Public => "pub",
                     _ => "private",
                 };
-                result.push_str(&format!(
-                    "- {visibility} {kind} {name} (ID: {})\n",
-                    id.0
-                ));
+                result.push_str(&format!("- {visibility} {kind} {name} (ID: {})\n", id.0));
             }
             Ok(result)
         })
     }
 
     /// Get item details
-                async fn handle_get_item_details(&self, arguments: Value) -> Result<String> {
+    async fn handle_get_item_details(&self, arguments: Value) -> Result<String> {
         let id_str = arguments
             .get("id")
             .and_then(|i| i.as_str())
@@ -425,7 +422,7 @@ impl RustdocMcpServer {
                         match &item.inner {
                             rustdoc_types::ItemEnum::Struct(struct_item) => {
                                 result.push_str("\n--- Detailed Struct Information ---\n");
-                                
+
                                 match &struct_item.kind {
                                     rustdoc_types::StructKind::Unit => {
                                         result.push_str("- Type: Unit struct\n");
@@ -433,7 +430,7 @@ impl RustdocMcpServer {
                                     rustdoc_types::StructKind::Tuple(field_ids) => {
                                         result.push_str("- Type: Tuple struct\n");
                                         result.push_str(&format!("- Fields ({}):\n", field_ids.len()));
-                                        
+
                                         let fields = data.resolve_struct_fields(field_ids);
                                         for (idx, field_item) in fields {
                                             result.push_str(&format!(
@@ -441,18 +438,17 @@ impl RustdocMcpServer {
                                                 idx,
                                                 field_item.name.as_deref().unwrap_or("<unnamed>")
                                             ));
-                                            if let Some(field_docs) = &field_item.docs {
-                                                if !field_docs.is_empty() {
+                                            if let Some(field_docs) = &field_item.docs
+                                                && !field_docs.is_empty() {
                                                     let preview = field_docs.lines().next().unwrap_or("");
-                                                    result.push_str(&format!("    // {}\n", preview));
+                                                    result.push_str(&format!("    // {preview}\n"));
                                                 }
-                                            }
                                         }
                                     }
                                     rustdoc_types::StructKind::Plain { fields, .. } => {
                                         result.push_str("- Type: Named struct\n");
                                         result.push_str(&format!("- Fields ({}):\n", fields.len()));
-                                        
+
                                         let field_items = data.resolve_named_struct_fields(fields);
                                         for (field_id, field_item) in field_items {
                                             result.push_str(&format!(
@@ -461,12 +457,11 @@ impl RustdocMcpServer {
                                                 field_item.inner.kind_name(),
                                                 field_id.0
                                             ));
-                                            if let Some(field_docs) = &field_item.docs {
-                                                if !field_docs.is_empty() {
+                                            if let Some(field_docs) = &field_item.docs
+                                                && !field_docs.is_empty() {
                                                     let preview = field_docs.lines().next().unwrap_or("");
-                                                    result.push_str(&format!("    // {}\n", preview));
+                                                    result.push_str(&format!("    // {preview}\n"));
                                                 }
-                                            }
                                         }
                                     }
                                 }
@@ -475,7 +470,7 @@ impl RustdocMcpServer {
                             rustdoc_types::ItemEnum::Enum(enum_item) => {
                                 result.push_str("\n--- Detailed Enum Information ---\n");
                                 result.push_str(&format!("- Variants ({}):\n", enum_item.variants.len()));
-                                
+
                                 let variants = data.resolve_enum_variants(&enum_item.variants);
                                 for (variant_id, variant_item) in variants {
                                     result.push_str(&format!(
@@ -484,12 +479,11 @@ impl RustdocMcpServer {
                                         variant_item.inner.kind_name(),
                                         variant_id.0
                                     ));
-                                    if let Some(variant_docs) = &variant_item.docs {
-                                        if !variant_docs.is_empty() {
+                                    if let Some(variant_docs) = &variant_item.docs
+                                        && !variant_docs.is_empty() {
                                             let preview = variant_docs.lines().next().unwrap_or("");
-                                            result.push_str(&format!("    // {}\n", preview));
+                                            result.push_str(&format!("    // {preview}\n"));
                                         }
-                                    }
                                 }
                             }
 
@@ -519,23 +513,22 @@ impl RustdocMcpServer {
                     if include_impls {
                         result.push_str("\n--- Implementation Information ---\n");
                         let impls = data.find_impls_for_type(&item_id);
-                        
+
                         if impls.is_empty() {
                             result.push_str("- No implementations found for this type\n");
                         } else {
                             result.push_str(&format!("- Found {} implementation(s):\n", impls.len()));
-                            
+
                             for (impl_id, impl_item) in impls {
                                 if let rustdoc_types::ItemEnum::Impl(impl_data) = &impl_item.inner {
                                     result.push_str(&format!("  Impl block (ID: {}):\n", impl_id.0));
-                                    
                                     if let Some(_trait_ref) = &impl_data.trait_ {
                                         result.push_str("    Type: Trait implementation\n");
                                         // Note: We could add more trait resolution here
                                     } else {
                                         result.push_str("    Type: Inherent implementation\n");
                                     }
-                                    
+
                                     if !impl_data.items.is_empty() {
                                         result.push_str(&format!("    Methods ({}):\n", impl_data.items.len()));
                                         let methods = data.resolve_impl_methods(impl_data);

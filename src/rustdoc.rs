@@ -15,94 +15,99 @@ impl RustdocProject {
     /// Create a new project from a Cargo.toml path
     pub fn from_manifest<P: AsRef<Path>>(manifest_path: P) -> Result<Self> {
         let manifest_path = manifest_path.as_ref().to_path_buf();
-        let project_root = manifest_path.parent()
+        let project_root = manifest_path
+            .parent()
             .ok_or_else(|| anyhow::anyhow!("Invalid manifest path"))?;
-        
+
         let target_dir = project_root.join("target");
-        
+
         let mut project = Self {
             manifest_path,
             target_dir,
             available_crates: HashMap::new(),
         };
-        
+
         project.discover_crates()?;
         Ok(project)
     }
-    
+
     /// Discover available crate documentation
     fn discover_crates(&mut self) -> Result<()> {
         let doc_dir = self.target_dir.join("doc");
         if !doc_dir.exists() {
             return Ok(()); // No docs generated yet
         }
-        
+
         self.available_crates.clear();
-        
+
         // Scan for .json files in target/doc/
         for entry in std::fs::read_dir(&doc_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
-            if let Some(extension) = path.extension() {
-                if extension == "json" {
-                    if let Some(stem) = path.file_stem() {
-                        if let Some(crate_name) = stem.to_str() {
-                            self.available_crates.insert(crate_name.to_string(), path);
-                        }
-                    }
-                }
+
+            if let Some(extension) = path.extension()
+                && extension == "json"
+                && let Some(stem) = path.file_stem()
+                && let Some(crate_name) = stem.to_str()
+            {
+                self.available_crates.insert(crate_name.to_string(), path);
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Generate documentation for the project or a specific package
     pub fn generate_docs(&mut self, package: Option<&str>, rebuild: bool) -> Result<()> {
         if !rebuild {
             return Ok(());
         }
-        
-        let project_root = self.manifest_path.parent()
+
+        let project_root = self
+            .manifest_path
+            .parent()
             .ok_or_else(|| anyhow::anyhow!("Invalid manifest path"))?;
-        
+
         let mut cmd = Command::new("cargo");
         cmd.arg("+nightly")
-           .arg("doc")
-           .env("RUSTDOCFLAGS", "-Z unstable-options --output-format=json")
-           .current_dir(project_root);
-        
+            .arg("doc")
+            .env("RUSTDOCFLAGS", "-Z unstable-options --output-format=json")
+            .current_dir(project_root);
+
         if let Some(pkg) = package {
             cmd.arg("--package").arg(pkg);
         }
-        
+
         let output = cmd.output()?;
-        
+
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(anyhow::anyhow!("cargo doc failed: {}", stderr));
         }
-        
+
         // Rediscover crates after rebuild
         self.discover_crates()?;
         Ok(())
     }
-    
+
     /// Get available crate names
     pub fn available_crates(&self) -> Vec<&String> {
         self.available_crates.keys().collect()
     }
-    
+
     /// Load rustdoc data for a specific crate
     pub fn load_crate(&self, crate_name: &str) -> Result<RustdocData> {
-        let json_path = self.available_crates.get(crate_name)
-            .ok_or_else(|| anyhow::anyhow!("Crate '{}' not found. Available crates: {:?}", 
-                crate_name, self.available_crates.keys().collect::<Vec<_>>()))?;
-        
+        let json_path = self.available_crates.get(crate_name).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Crate '{}' not found. Available crates: {:?}",
+                crate_name,
+                self.available_crates.keys().collect::<Vec<_>>()
+            )
+        })?;
+
         RustdocData::from_file(json_path)
     }
-    
+
     /// Get project information
     pub fn project_info(&self) -> ProjectInfo {
         ProjectInfo {
@@ -184,18 +189,20 @@ impl RustdocData {
         }
         stats
     }
-    
+
     /// Get detailed information about struct fields by resolving their IDs
-            pub fn resolve_struct_fields<'a>(&self, field_ids: &'a [Option<Id>]) -> Vec<(usize, &Item)> {
+    pub fn resolve_struct_fields(&self, field_ids: &[Option<Id>]) -> Vec<(usize, &Item)> {
         field_ids
             .iter()
             .enumerate()
             .filter_map(|(idx, id_opt)| {
-                id_opt.as_ref().and_then(|id| self.get_item(id).map(|item| (idx, item)))
+                id_opt
+                    .as_ref()
+                    .and_then(|id| self.get_item(id).map(|item| (idx, item)))
             })
             .collect()
     }
-            
+
     /// Get detailed information about named struct fields by resolving their IDs
     pub fn resolve_named_struct_fields<'a>(&self, field_ids: &'a [Id]) -> Vec<(&'a Id, &Item)> {
         field_ids
@@ -204,9 +211,8 @@ impl RustdocData {
             .collect()
     }
 
-
     /// Get detailed information about enum variants by resolving their IDs
-        pub fn resolve_enum_variants<'a>(&self, variant_ids: &'a [Id]) -> Vec<(&'a Id, &Item)> {
+    pub fn resolve_enum_variants<'a>(&self, variant_ids: &'a [Id]) -> Vec<(&'a Id, &Item)> {
         variant_ids
             .iter()
             .filter_map(|id| self.get_item(id).map(|item| (id, item)))
@@ -230,19 +236,20 @@ impl RustdocData {
     }
 
     /// Check if an impl block applies to a specific type
-        fn type_matches_impl(&self, type_id: &Id, impl_item: &rustdoc_types::Impl) -> bool {
+    fn type_matches_impl(&self, type_id: &Id, impl_item: &rustdoc_types::Impl) -> bool {
         // This is a simplified check - in practice, we'd need to resolve type paths
         // For now, we'll check if the impl's for_ field references our type
         self.type_references_id(&impl_item.for_, type_id)
     }
 
     /// Check if a type reference contains our target ID
-            fn type_references_id(&self, type_ref: &rustdoc_types::Type, target_id: &Id) -> bool {
+    fn type_references_id(&self, type_ref: &rustdoc_types::Type, target_id: &Id) -> bool {
         match type_ref {
             rustdoc_types::Type::ResolvedPath(path) => &path.id == target_id,
-            rustdoc_types::Type::DynTrait(dyn_trait) => {
-                dyn_trait.traits.iter().any(|trait_| self.path_references_id(&trait_.trait_, target_id))
-            }
+            rustdoc_types::Type::DynTrait(dyn_trait) => dyn_trait
+                .traits
+                .iter()
+                .any(|trait_| self.path_references_id(&trait_.trait_, target_id)),
             rustdoc_types::Type::Generic(_) => false,
             rustdoc_types::Type::Primitive(_) => false,
             rustdoc_types::Type::FunctionPointer(_) => false,
@@ -251,28 +258,35 @@ impl RustdocData {
             }
             rustdoc_types::Type::Slice(inner) => self.type_references_id(inner, target_id),
             rustdoc_types::Type::Array { type_, .. } => self.type_references_id(type_, target_id),
-            rustdoc_types::Type::ImplTrait(bounds) => {
-                bounds.iter().any(|bound| self.bound_references_id(bound, target_id))
-            }
+            rustdoc_types::Type::ImplTrait(bounds) => bounds
+                .iter()
+                .any(|bound| self.bound_references_id(bound, target_id)),
             rustdoc_types::Type::Infer => false,
-            rustdoc_types::Type::RawPointer { type_, .. } => self.type_references_id(type_, target_id),
-            rustdoc_types::Type::BorrowedRef { type_, .. } => self.type_references_id(type_, target_id),
-            rustdoc_types::Type::QualifiedPath { self_type, trait_, .. } => {
-                self.type_references_id(self_type, target_id) ||
-                trait_.as_ref().map_or(false, |t| self.path_references_id(t, target_id))
+            rustdoc_types::Type::RawPointer { type_, .. } => {
+                self.type_references_id(type_, target_id)
+            }
+            rustdoc_types::Type::BorrowedRef { type_, .. } => {
+                self.type_references_id(type_, target_id)
+            }
+            rustdoc_types::Type::QualifiedPath {
+                self_type, trait_, ..
+            } => {
+                self.type_references_id(self_type, target_id)
+                    || trait_
+                        .as_ref()
+                        .is_some_and(|t| self.path_references_id(t, target_id))
             }
             rustdoc_types::Type::Pat { .. } => false,
         }
     }
-        
+
     /// Check if a path references our target ID
     fn path_references_id(&self, path: &rustdoc_types::Path, target_id: &Id) -> bool {
         &path.id == target_id
     }
 
-
     /// Check if a generic bound references our target ID
-            fn bound_references_id(&self, bound: &rustdoc_types::GenericBound, target_id: &Id) -> bool {
+    fn bound_references_id(&self, bound: &rustdoc_types::GenericBound, target_id: &Id) -> bool {
         match bound {
             rustdoc_types::GenericBound::TraitBound { trait_, .. } => {
                 self.path_references_id(trait_, target_id)
@@ -283,23 +297,24 @@ impl RustdocData {
     }
 
     /// Resolve impl methods by getting items from impl item IDs
-        pub fn resolve_impl_methods<'a>(&self, impl_item: &'a rustdoc_types::Impl) -> Vec<(&'a Id, &Item)> {
+    pub fn resolve_impl_methods<'a>(
+        &self,
+        impl_item: &'a rustdoc_types::Impl,
+    ) -> Vec<(&'a Id, &Item)> {
         impl_item
             .items
             .iter()
             .filter_map(|id| self.get_item(id).map(|item| (id, item)))
             .collect()
     }
-    
+
     /// Resolve trait associated items by getting items from trait item IDs
-        pub fn resolve_trait_items<'a>(&self, trait_items: &'a [Id]) -> Vec<(&'a Id, &Item)> {
+    pub fn resolve_trait_items<'a>(&self, trait_items: &'a [Id]) -> Vec<(&'a Id, &Item)> {
         trait_items
             .iter()
             .filter_map(|id| self.get_item(id).map(|item| (id, item)))
             .collect()
     }
-
-
 }
 
 /// Basic information about a crate
