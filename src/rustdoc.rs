@@ -1,6 +1,5 @@
 use anyhow::Result;
 use rustdoc_types::{Crate, Id, Item};
-use serde_json;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
