@@ -1,7 +1,126 @@
 use anyhow::Result;
 use rustdoc_types::{Crate, Id, Item};
+use serde_json;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+/// Manages a Cargo project and its rustdoc JSON files
+pub struct RustdocProject {
+    manifest_path: PathBuf,
+    target_dir: PathBuf,
+    available_crates: HashMap<String, PathBuf>, // crate name -> json file path
+}
+
+impl RustdocProject {
+    /// Create a new project from a Cargo.toml path
+    pub fn from_manifest<P: AsRef<Path>>(manifest_path: P) -> Result<Self> {
+        let manifest_path = manifest_path.as_ref().to_path_buf();
+        let project_root = manifest_path.parent()
+            .ok_or_else(|| anyhow::anyhow!("Invalid manifest path"))?;
+        
+        let target_dir = project_root.join("target");
+        
+        let mut project = Self {
+            manifest_path,
+            target_dir,
+            available_crates: HashMap::new(),
+        };
+        
+        project.discover_crates()?;
+        Ok(project)
+    }
+    
+    /// Discover available crate documentation
+    fn discover_crates(&mut self) -> Result<()> {
+        let doc_dir = self.target_dir.join("doc");
+        if !doc_dir.exists() {
+            return Ok(()); // No docs generated yet
+        }
+        
+        self.available_crates.clear();
+        
+        // Scan for .json files in target/doc/
+        for entry in std::fs::read_dir(&doc_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            
+            if let Some(extension) = path.extension() {
+                if extension == "json" {
+                    if let Some(stem) = path.file_stem() {
+                        if let Some(crate_name) = stem.to_str() {
+                            self.available_crates.insert(crate_name.to_string(), path);
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Generate documentation for the project or a specific package
+    pub fn generate_docs(&mut self, package: Option<&str>, rebuild: bool) -> Result<()> {
+        if !rebuild {
+            return Ok(());
+        }
+        
+        let project_root = self.manifest_path.parent()
+            .ok_or_else(|| anyhow::anyhow!("Invalid manifest path"))?;
+        
+        let mut cmd = Command::new("cargo");
+        cmd.arg("+nightly")
+           .arg("doc")
+           .env("RUSTDOCFLAGS", "-Z unstable-options --output-format=json")
+           .current_dir(project_root);
+        
+        if let Some(pkg) = package {
+            cmd.arg("--package").arg(pkg);
+        }
+        
+        let output = cmd.output()?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow::anyhow!("cargo doc failed: {}", stderr));
+        }
+        
+        // Rediscover crates after rebuild
+        self.discover_crates()?;
+        Ok(())
+    }
+    
+    /// Get available crate names
+    pub fn available_crates(&self) -> Vec<&String> {
+        self.available_crates.keys().collect()
+    }
+    
+    /// Load rustdoc data for a specific crate
+    pub fn load_crate(&self, crate_name: &str) -> Result<RustdocData> {
+        let json_path = self.available_crates.get(crate_name)
+            .ok_or_else(|| anyhow::anyhow!("Crate '{}' not found. Available crates: {:?}", 
+                crate_name, self.available_crates.keys().collect::<Vec<_>>()))?;
+        
+        RustdocData::from_file(json_path)
+    }
+    
+    /// Get project information
+    pub fn project_info(&self) -> ProjectInfo {
+        ProjectInfo {
+            manifest_path: self.manifest_path.clone(),
+            target_dir: self.target_dir.clone(),
+            available_crates: self.available_crates.keys().cloned().collect(),
+        }
+    }
+}
+
+/// Information about a cargo project
+#[derive(Debug, Clone)]
+pub struct ProjectInfo {
+    pub manifest_path: PathBuf,
+    pub target_dir: PathBuf,
+    pub available_crates: Vec<String>,
+}
 
 /// Wrapper around rustdoc JSON data that provides convenient query methods
 pub struct RustdocData {
