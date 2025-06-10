@@ -102,6 +102,16 @@
           "type": "string",
           "description": "Name of the crate (optional, defaults to project root)"
         },
+        "detailed": {
+          "type": "boolean",
+          "description": "Include detailed information about sub-items (fields, variants, methods) (default: false)",
+          "default": false
+        },
+        "include_impls": {
+          "type": "boolean", 
+          "description": "Include implementation details and methods (default: false)",
+          "default": false
+        },
         "rebuild": {
           "type": "boolean",
           "description": "Rebuild documentation before querying (default: false)",

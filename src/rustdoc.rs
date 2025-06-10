@@ -184,6 +184,122 @@ impl RustdocData {
         }
         stats
     }
+    
+    /// Get detailed information about struct fields by resolving their IDs
+            pub fn resolve_struct_fields<'a>(&self, field_ids: &'a [Option<Id>]) -> Vec<(usize, &Item)> {
+        field_ids
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, id_opt)| {
+                id_opt.as_ref().and_then(|id| self.get_item(id).map(|item| (idx, item)))
+            })
+            .collect()
+    }
+            
+    /// Get detailed information about named struct fields by resolving their IDs
+    pub fn resolve_named_struct_fields<'a>(&self, field_ids: &'a [Id]) -> Vec<(&'a Id, &Item)> {
+        field_ids
+            .iter()
+            .filter_map(|id| self.get_item(id).map(|item| (id, item)))
+            .collect()
+    }
+
+
+    /// Get detailed information about enum variants by resolving their IDs
+        pub fn resolve_enum_variants<'a>(&self, variant_ids: &'a [Id]) -> Vec<(&'a Id, &Item)> {
+        variant_ids
+            .iter()
+            .filter_map(|id| self.get_item(id).map(|item| (id, item)))
+            .collect()
+    }
+
+    /// Find all impl blocks for a given type ID
+    pub fn find_impls_for_type(&self, type_id: &Id) -> Vec<(&Id, &Item)> {
+        self.crate_data
+            .index
+            .iter()
+            .filter(|(_, item)| {
+                if let rustdoc_types::ItemEnum::Impl(impl_item) = &item.inner {
+                    // Check if this impl is for our target type
+                    self.type_matches_impl(type_id, impl_item)
+                } else {
+                    false
+                }
+            })
+            .collect()
+    }
+
+    /// Check if an impl block applies to a specific type
+        fn type_matches_impl(&self, type_id: &Id, impl_item: &rustdoc_types::Impl) -> bool {
+        // This is a simplified check - in practice, we'd need to resolve type paths
+        // For now, we'll check if the impl's for_ field references our type
+        self.type_references_id(&impl_item.for_, type_id)
+    }
+
+    /// Check if a type reference contains our target ID
+            fn type_references_id(&self, type_ref: &rustdoc_types::Type, target_id: &Id) -> bool {
+        match type_ref {
+            rustdoc_types::Type::ResolvedPath(path) => &path.id == target_id,
+            rustdoc_types::Type::DynTrait(dyn_trait) => {
+                dyn_trait.traits.iter().any(|trait_| self.path_references_id(&trait_.trait_, target_id))
+            }
+            rustdoc_types::Type::Generic(_) => false,
+            rustdoc_types::Type::Primitive(_) => false,
+            rustdoc_types::Type::FunctionPointer(_) => false,
+            rustdoc_types::Type::Tuple(types) => {
+                types.iter().any(|t| self.type_references_id(t, target_id))
+            }
+            rustdoc_types::Type::Slice(inner) => self.type_references_id(inner, target_id),
+            rustdoc_types::Type::Array { type_, .. } => self.type_references_id(type_, target_id),
+            rustdoc_types::Type::ImplTrait(bounds) => {
+                bounds.iter().any(|bound| self.bound_references_id(bound, target_id))
+            }
+            rustdoc_types::Type::Infer => false,
+            rustdoc_types::Type::RawPointer { type_, .. } => self.type_references_id(type_, target_id),
+            rustdoc_types::Type::BorrowedRef { type_, .. } => self.type_references_id(type_, target_id),
+            rustdoc_types::Type::QualifiedPath { self_type, trait_, .. } => {
+                self.type_references_id(self_type, target_id) ||
+                trait_.as_ref().map_or(false, |t| self.path_references_id(t, target_id))
+            }
+            rustdoc_types::Type::Pat { .. } => false,
+        }
+    }
+        
+    /// Check if a path references our target ID
+    fn path_references_id(&self, path: &rustdoc_types::Path, target_id: &Id) -> bool {
+        &path.id == target_id
+    }
+
+
+    /// Check if a generic bound references our target ID
+            fn bound_references_id(&self, bound: &rustdoc_types::GenericBound, target_id: &Id) -> bool {
+        match bound {
+            rustdoc_types::GenericBound::TraitBound { trait_, .. } => {
+                self.path_references_id(trait_, target_id)
+            }
+            rustdoc_types::GenericBound::Outlives(_) => false,
+            rustdoc_types::GenericBound::Use(_) => false,
+        }
+    }
+
+    /// Resolve impl methods by getting items from impl item IDs
+        pub fn resolve_impl_methods<'a>(&self, impl_item: &'a rustdoc_types::Impl) -> Vec<(&'a Id, &Item)> {
+        impl_item
+            .items
+            .iter()
+            .filter_map(|id| self.get_item(id).map(|item| (id, item)))
+            .collect()
+    }
+    
+    /// Resolve trait associated items by getting items from trait item IDs
+        pub fn resolve_trait_items<'a>(&self, trait_items: &'a [Id]) -> Vec<(&'a Id, &Item)> {
+        trait_items
+            .iter()
+            .filter_map(|id| self.get_item(id).map(|item| (id, item)))
+            .collect()
+    }
+
+
 }
 
 /// Basic information about a crate
