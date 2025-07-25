@@ -63,7 +63,7 @@ jobs:
       - uses: taiki-e/cache-cargo-install-action@v2
         with:
           tool: cargo-expand
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools-preview, rust-docs-json
       - uses: Swatinem/rust-cache@v2
