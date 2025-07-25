@@ -38,7 +38,7 @@ Add this to your Claude Desktop MCP configuration:
 ```json
 {
   "mcpServers": {
-    "fs-mcp": {
+    "rustdocs": {
       "command": "/path/to/rustdoc-mcp/rustdoc-mcp",
       "args": ["serve"]
     }
