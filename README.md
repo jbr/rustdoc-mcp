@@ -1,5 +1,16 @@
 # rustdoc-mcp
 
+[![codecov](https://codecov.io/gh/jbr/rustdoc-mcp/graph/badge.svg?token=FDpsPBK9zl)](https://codecov.io/gh/jbr/rustdoc-mcp)
+[![ci][ci-badge]][ci]
+[![crates.io version badge][version-badge]][crate]
+
+[ci]: https://github.com/jbr/rustdoc-mcp/actions?query=workflow%3ACI
+[ci-badge]: https://github.com/jbr/rustdoc-mcp/workflows/CI/badge.svg
+[version-badge]: https://img.shields.io/crates/v/rustdoc-mcp.svg?style=flat-square
+[crate]: https://crates.io/crates/rustdoc-mcp
+
+
+
 A Model Context Protocol server for rust documentation
 
 Note: This crate requires `nightly` to be installed, since it uses unstable rustdoc json output format.
