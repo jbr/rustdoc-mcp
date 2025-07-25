@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::fmt::{self, Formatter};
 
-pub struct Indent<'a>(&'a str, usize);
+pub(crate) struct Indent<'a>(&'a str, usize);
 
 impl<'a> Indent<'a> {
     pub(crate) fn new(string: &'a str, indentation: usize) -> Self {

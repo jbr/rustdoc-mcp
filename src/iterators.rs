@@ -212,7 +212,7 @@ impl<'a> Iterator for ChildItems<'a> {
 }
 
 impl<'a> ChildItems<'a> {
-    pub fn new(item: DocRef<'a, Item>) -> Self {
+    pub(crate) fn new(item: DocRef<'a, Item>) -> Self {
         match &item.item().inner {
             ItemEnum::Module(module) => Self::Module(item.id_iter(&module.items)),
             ItemEnum::Enum(enum_item) => {

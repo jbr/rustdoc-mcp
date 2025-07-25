@@ -44,22 +44,22 @@ pub struct GetItem {
 
 impl GetItem {
     /// Get include_source with default
-    pub fn include_source(&self) -> bool {
+    pub(crate) fn include_source(&self) -> bool {
         self.include_source.unwrap_or(false)
     }
 
     /// Get recursive with default
-    pub fn recursive(&self) -> bool {
+    pub(crate) fn recursive(&self) -> bool {
         self.recursive.unwrap_or(false)
     }
 
     /// Get verbosity with default
-    pub fn verbosity(&self) -> Verbosity {
+    pub(crate) fn verbosity(&self) -> Verbosity {
         self.verbosity.unwrap_or_default()
     }
 
     /// Get filters with default
-    pub fn filters(&self) -> &[Filter] {
+    pub(crate) fn filters(&self) -> &[Filter] {
         self.filter.as_deref().unwrap_or(Filter::VARIANTS)
     }
 }
