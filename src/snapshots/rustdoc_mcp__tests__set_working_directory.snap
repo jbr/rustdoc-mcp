@@ -1,6 +1,5 @@
 ---
 source: src/tests.rs
-assertion_line: 36
 expression: normalized_result
 ---
 Set context to /TEST_CRATE_ROOT
