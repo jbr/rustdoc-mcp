@@ -26,7 +26,6 @@ struct FlatItem<'a> {
 impl Request {
     /// Collect all items in a module hierarchy as flat qualified paths
     fn collect_flat_items<'a>(
-        &'a self,
         collected: &mut Vec<FlatItem<'a>>,
         path: Option<String>,
         item: DocRef<'a, Item>,
@@ -47,7 +46,7 @@ impl Request {
                 });
 
                 if context.is_recursive() {
-                    self.collect_flat_items(collected, Some(path), child, context);
+                    Self::collect_flat_items(collected, Some(path), child, context);
                 }
             }
         }
@@ -115,7 +114,7 @@ impl Request {
         let mut result = String::new();
 
         let mut collected = Vec::new();
-        self.collect_flat_items(&mut collected, None, item, context);
+        Self::collect_flat_items(&mut collected, None, item, context);
         result.push_str(&self.format_grouped_flat_items(&collected, context));
 
         result
