@@ -1,13 +1,14 @@
 use crate::doc_ref::DocRef;
 use crate::indent::Indent;
 use crate::rustdoc::{RustdocData, RustdocProject};
+use crate::string_utils::case_aware_jaro_winkler;
 use elsa::FrozenMap;
 use fieldwork::Fieldwork;
 use rustdoc_types::Item;
 use std::fmt;
+use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::rc::Rc;
-use std::{fmt::Debug, fs};
 
 mod formatting;
 
@@ -57,7 +58,7 @@ impl Request {
                     .map(|name| Suggestion {
                         path: name.to_string(),
                         item: None,
-                        score: case_penalized_jw(name, crate_name),
+                        score: case_aware_jaro_winkler(name, crate_name),
                     }),
             );
             return None;
@@ -123,7 +124,7 @@ impl Request {
                 if path.starts_with(&full_path) {
                     None
                 } else {
-                    let score = case_penalized_jw(path, &full_path);
+                    let score = case_aware_jaro_winkler(path, &full_path);
                     Some(Suggestion {
                         path: full_path,
                         score,
@@ -166,15 +167,4 @@ pub(crate) struct Suggestion<'a> {
     path: String,
     item: Option<DocRef<'a, Item>>,
     score: f64,
-}
-
-fn case_penalized_jw(a: &str, b: &str) -> f64 {
-    let base = strsim::jaro_winkler(&a.to_ascii_lowercase(), &b.to_ascii_lowercase());
-    let case_penalty = a
-        .chars()
-        .zip(b.chars())
-        .filter(|(ac, bc)| ac.eq_ignore_ascii_case(bc) && ac != bc)
-        .count() as f64
-        * 0.02;
-    base - case_penalty
 }
