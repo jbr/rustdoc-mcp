@@ -31,9 +31,9 @@ and `test`, you'll need to `rustup component add rust-docs-json`. This is option
 $ cargo install rustdoc-mcp
 ```
 
-## Usage with Claude Desktop
+## Usage with Claude Desktop or gemini-cli
 
-Add this to your Claude Desktop MCP configuration:
+Add this to your MCP configuration JSON file:
 
 ```json
 {
