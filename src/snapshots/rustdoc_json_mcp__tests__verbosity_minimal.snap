@@ -1,0 +1,45 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: test_crate
+Kind: Module
+Visibility: Public
+Defined at: test_crate
+
+Modules:
+reexport_mod
+submodule
+
+Structs:
+GenericStruct
+SubStruct
+TestStruct
+TupleStruct
+UnitStruct
+Vec
+
+Enums:
+GenericEnum
+TestEnum
+
+Traits:
+ComplexTrait
+TestTrait
+
+Functions:
+async_function
+generic_function
+sub_function
+test_function
+
+Constants:
+TEST_CONSTANT
+
+Statics:
+TEST_STATIC
+
+Variants:
+VariantA
+VariantB
+VariantC

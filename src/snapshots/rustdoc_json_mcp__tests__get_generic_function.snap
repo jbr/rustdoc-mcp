@@ -1,0 +1,16 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: generic_function
+Kind: Function
+Visibility: Public
+Defined at: test_crate::generic_function
+
+A generic function
+
+
+fn generic_function<T, U>(data: T, transform: U) -> String
+where
+    T: std::fmt::Debug,
+    U: Fn(T) -> String

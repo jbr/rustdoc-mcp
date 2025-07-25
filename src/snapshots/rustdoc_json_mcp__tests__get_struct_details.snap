@@ -1,0 +1,47 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: TestStruct
+Kind: Struct
+Visibility: Public
+Defined at: test_crate::TestStruct
+
+A simple struct for testing basic functionality.
+
+This struct demonstrates basic usage patterns and should show completely
+since it only has one paragraph of documentation.
+
+
+```rust
+struct TestStruct {
+    pub field: String,
+    pub count: u32,
+}
+```
+
+Fields:
+
+• field: String
+    A public field
+
+• count: u32
+    Another public field
+
+
+Associated Types:
+
+• pub const ASSOCIATED_CONST
+    This is an associated constant for a struct
+
+• pub fn new(field: String, count: u32) -> Self
+    Create a new TestStruct
+
+• pub fn get_field(&self) -> &str
+    Get the field value
+
+• pub fn increment_count(&mut self)
+    Update the count
+
+
+Implements: TestTrait, Borrow<T>, BorrowMut<T>, Clone, Debug, From<T>, Into<U>, Send, Sync, [+9 more std traits]

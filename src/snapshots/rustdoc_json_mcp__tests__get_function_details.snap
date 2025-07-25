@@ -1,0 +1,21 @@
+---
+source: src/tests.rs
+expression: normalized_result
+---
+Item: test_function
+Kind: Function
+Visibility: Public
+Defined at: test_crate::test_function
+
+A public function
+
+
+fn test_function(input: &str) -> String
+Source: /TEST_CRATE_ROOT/src/lib.rs
+```rust
+/// A public function
+pub fn test_function(input: &str) -> String {
+    format!("processed: {}", input)
+}
+
+```

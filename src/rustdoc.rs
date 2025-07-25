@@ -1,364 +1,459 @@
-use anyhow::Result;
-use rustdoc_types::{Crate, Id, Item};
+use anyhow::{Result, anyhow};
+use cargo_metadata::{Metadata, MetadataCommand};
+use cargo_toml::Manifest;
+use fieldwork::Fieldwork;
+use rustdoc_types::{Crate, FORMAT_VERSION, Id, Item};
+use serde::Deserialize;
 use std::collections::HashMap;
+use std::fmt::{self, Debug, Formatter};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::SystemTime;
+use walkdir::WalkDir;
+
+mod crate_name;
+
+use crate::doc_ref::DocRef;
+use crate::request::Request;
+use crate_name::CrateName;
+
+pub(crate) const RUST_CRATES: [CrateName<'_>; 5] = [
+    CrateName("std"),
+    CrateName("alloc"),
+    CrateName("core"),
+    CrateName("proc_macro"),
+    CrateName("test"),
+];
 
 /// Manages a Cargo project and its rustdoc JSON files
-pub struct RustdocProject {
+#[derive(Fieldwork)]
+#[fieldwork(get)]
+pub(crate) struct RustdocProject {
     manifest_path: PathBuf,
     target_dir: PathBuf,
-    available_crates: HashMap<String, PathBuf>, // crate name -> json file path
+    manifest: Manifest,
+    metadata: Metadata,
+    descriptions: HashMap<String, String>,
+    workspace_packages: Box<[String]>,
+    rustc_docs: Option<(PathBuf, String)>,
+}
+
+impl Debug for RustdocProject {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RustdocProject")
+            .field("manifest_path", &self.manifest_path)
+            .field("target_dir", &self.target_dir)
+            .field("descriptions", &self.descriptions)
+            .finish_non_exhaustive()
+    }
+}
+
+pub(crate) fn rustc_docs() -> Option<(PathBuf, String)> {
+    let sysroot = Command::new("rustup")
+        .args(["run", "nightly", "rustc", "--print", "sysroot"])
+        .output()
+        .ok()?;
+
+    if !sysroot.status.success() {
+        return None;
+    }
+
+    let s = str::from_utf8(&sysroot.stdout).ok()?;
+
+    let path = PathBuf::from(s.trim()).join("share/doc/rust/json/");
+
+    let version = Command::new("rustup")
+        .args(["run", "nightly", "rustc", "--version", "--verbose"])
+        .arg("run")
+        .output()
+        .ok()?;
+
+    if !version.status.success() {
+        return None;
+    }
+
+    let version = str::from_utf8(&version.stdout)
+        .ok()?
+        .lines()
+        .find_map(|line| line.strip_prefix("release: "))?
+        .to_string();
+
+    path.exists().then_some((path, version))
+}
+
+fn eq_ignoring_dash_underscore(a: &str, b: &str) -> bool {
+    let mut a = a.chars();
+    let mut b = b.chars();
+    loop {
+        match (a.next(), b.next()) {
+            (Some('_'), Some('-')) | (Some('-'), Some('_')) => {}
+            (Some(a), Some(b)) if a == b => {}
+            (None, None) => break true,
+            _ => break false,
+        }
+    }
 }
 
 impl RustdocProject {
     /// Create a new project from a Cargo.toml path
-    pub fn from_manifest<P: AsRef<Path>>(manifest_path: P) -> Result<Self> {
-        let manifest_path = manifest_path.as_ref().to_path_buf();
+    pub(crate) fn load(manifest_path: PathBuf) -> Result<Self> {
+        // Look for Cargo.toml in the working directory
+        if !manifest_path.exists() {
+            return Err(anyhow!(
+                "Not a Rust project: Cargo.toml not found in {}",
+                manifest_path.display()
+            ));
+        }
+
+        let manifest = Manifest::from_path(&manifest_path)?;
         let project_root = manifest_path
             .parent()
-            .ok_or_else(|| anyhow::anyhow!("Invalid manifest path"))?;
+            .ok_or_else(|| anyhow!("Invalid manifest path"))?;
 
         let target_dir = project_root.join("target");
 
+        let metadata = MetadataCommand::new()
+            .manifest_path(&manifest_path)
+            .exec()?;
+
+        let workspace_packages = metadata
+            .workspace_packages()
+            .iter()
+            .map(|package| package.name.to_string())
+            .collect();
+
+        let rustc_docs = rustc_docs();
+
         let mut project = Self {
             manifest_path,
+            manifest,
             target_dir,
-            available_crates: HashMap::new(),
+            metadata,
+            descriptions: HashMap::new(),
+            workspace_packages,
+            rustc_docs,
         };
 
-        project.discover_crates()?;
+        project.populate_descriptions();
         Ok(project)
     }
 
-    /// Discover available crate documentation
-    fn discover_crates(&mut self) -> Result<()> {
+    pub(crate) fn resolve_json_path<'a>(
+        &'a self,
+        crate_name: CrateName<'a>,
+    ) -> Option<(PathBuf, CrateType)> {
         let doc_dir = self.target_dir.join("doc");
-        if !doc_dir.exists() {
-            return Ok(()); // No docs generated yet
+
+        if RUST_CRATES.contains(&crate_name)
+            && let Some((rustc_docs, _)) = &self.rustc_docs
+        {
+            Some((
+                rustc_docs.join(format!("{crate_name}.json")),
+                CrateType::Rust,
+            ))
+        } else if self.available_crates().contains(&crate_name) {
+            let underscored = crate_name.replace('-', "_");
+            Some((
+                doc_dir.join(format!("{underscored}.json")),
+                if self
+                    .workspace_packages
+                    .iter()
+                    .any(|c| eq_ignoring_dash_underscore(c, &crate_name))
+                {
+                    CrateType::Workspace
+                } else {
+                    CrateType::Library
+                },
+            ))
+        } else {
+            None
         }
-
-        self.available_crates.clear();
-
-        // Scan for .json files in target/doc/
-        for entry in std::fs::read_dir(&doc_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            if let Some(extension) = path.extension() {
-                if extension == "json" {
-                    if let Some(stem) = path.file_stem() {
-                        if let Some(crate_name) = stem.to_str() {
-                            self.available_crates.insert(crate_name.to_string(), path);
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
     }
 
     /// Generate documentation for the project or a specific package
-    pub fn generate_docs(&mut self, package: Option<&str>, rebuild: bool) -> Result<()> {
-        if !rebuild {
-            return Ok(());
-        }
+    pub(crate) fn rebuild_docs(&self, crate_name: CrateName<'_>) -> Result<()> {
+        let project_root = self.project_root();
 
-        let project_root = self
-            .manifest_path
-            .parent()
-            .ok_or_else(|| anyhow::anyhow!("Invalid manifest path"))?;
-
-        let mut cmd = Command::new("cargo");
-        cmd.arg("+nightly")
-            .arg("doc")
+        let output = Command::new("rustup")
+            .arg("run")
+            .args([
+                "nightly",
+                "cargo",
+                "doc",
+                "--no-deps",
+                "--package",
+                &*crate_name,
+            ])
             .env("RUSTDOCFLAGS", "-Z unstable-options --output-format=json")
-            .current_dir(project_root);
-
-        if let Some(pkg) = package {
-            cmd.arg("--package").arg(pkg);
-        }
-
-        let output = cmd.output()?;
+            .current_dir(project_root)
+            .output()?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow::anyhow!("cargo doc failed: {}", stderr));
+            return Err(anyhow!("cargo doc failed: {}", stderr));
         }
-
-        // Rediscover crates after rebuild
-        self.discover_crates()?;
         Ok(())
     }
 
-    /// Get available crate names
-    pub fn available_crates(&self) -> Vec<&String> {
-        self.available_crates.keys().collect()
+    fn populate_descriptions(&mut self) {
+        self.descriptions = self
+            .metadata
+            .packages
+            .iter()
+            .filter_map(|package| {
+                package
+                    .description
+                    .as_ref()
+                    .map(|description| (package.name.to_string(), description.clone()))
+            })
+            .chain(if let Some((_, rustc_version)) = self.rustc_docs() {
+                vec![
+                    ("std".to_string(), format!("The Rust Standard Library (rustc {rustc_version})")),
+                    (
+                        "alloc".to_string(),
+                        format!("The Rust core allocation and collections library (rustc {rustc_version})"),
+                    ),
+                    ("core".to_string(), format!("The Rust Core Library (rustc {rustc_version})")),
+                    (
+                        "proc_macro".to_string(),
+                        format!("A support library for macro authors when defining new macros (rustc {rustc_version})"),
+                    ),
+                    (
+                        "test".to_string(),
+                        format!("Support code for rustc's built in unit-test and micro-benchmarking framework (rustc {rustc_version})")
+                    ),
+                ]
+            } else {
+                vec![]
+            })
+            .collect();
+    }
+
+    /// Get available crate names and optional descriptions
+    pub(crate) fn available_crates_with_descriptions(&self) -> Vec<(String, Option<String>)> {
+        self.manifest
+            .dependencies
+            .keys()
+            .chain(self.manifest.dev_dependencies.keys())
+            .map(|x| &**x)
+            .chain(
+                if self.rustc_docs.is_some() {
+                    RUST_CRATES.as_slice()
+                } else {
+                    [].as_slice()
+                }
+                .iter()
+                .map(|x| &**x),
+            )
+            .map(|name| (name.to_string(), self.descriptions.get(name).cloned()))
+            .chain(
+                self.metadata
+                    .workspace_packages()
+                    .iter()
+                    .map(|x| (x.name.to_string(), x.description.clone())),
+            )
+            .collect()
+    }
+
+    /// Get available crate names and optional descriptions
+    pub(crate) fn available_crates(&self) -> Vec<CrateName<'_>> {
+        self.manifest
+            .dependencies
+            .keys()
+            .chain(self.manifest.dev_dependencies.keys())
+            .chain(self.metadata.workspace_packages().iter().map(|x| &*x.name))
+            .filter_map(|name| CrateName::new(name))
+            .collect()
+    }
+
+    pub(crate) fn project_root(&self) -> &Path {
+        self.manifest_path.parent().unwrap_or(&self.manifest_path)
+    }
+
+    pub(crate) fn default_crate_name(&self) -> Option<CrateName<'_>> {
+        if let Some(root) = self.metadata.root_package() {
+            CrateName::new(&root.name)
+        } else {
+            self.metadata
+                .workspace_default_packages()
+                .first()
+                .and_then(|p| CrateName::new(p.name.as_str()))
+        }
+    }
+
+    pub(crate) fn normalize_crate_name<'a>(&'a self, crate_name: &str) -> Option<CrateName<'a>> {
+        match crate_name {
+            "crate" => self.default_crate_name(),
+
+            // rustdoc placeholders
+            "alloc" | "alloc_crate" => Some(CrateName("alloc")),
+            "core" | "core_crate" => Some(CrateName("core")),
+            "proc_macro" | "proc_macro_crate" => Some(CrateName("proc_macro")),
+            "test" | "test_crate" => Some(CrateName("test")),
+            "std" | "std_crate" => Some(CrateName("std")),
+            "std_detect" | "rustc_literal_escaper" => None,
+
+            // future-proof: skip internal rustc crates
+            name if name.starts_with("rustc_") => None,
+            name => self
+                .available_crates()
+                .iter()
+                .find(|correct_name| eq_ignoring_dash_underscore(correct_name, name))
+                .copied(),
+        }
     }
 
     /// Load rustdoc data for a specific crate
-    pub fn load_crate(&self, crate_name: &str) -> Result<RustdocData> {
-        let json_path = self.available_crates.get(crate_name).ok_or_else(|| {
-            anyhow::anyhow!(
-                "Crate '{}' not found. Available crates: {:?}",
-                crate_name,
-                self.available_crates.keys().collect::<Vec<_>>()
-            )
-        })?;
+    pub(crate) fn load_crate(&self, crate_name: CrateName<'_>) -> Option<RustdocData> {
+        let (json_path, crate_type) = self.resolve_json_path(crate_name)?;
 
-        RustdocData::from_file(json_path)
+        match crate_type {
+            CrateType::Workspace => self.load_workspace(crate_name, &json_path),
+            CrateType::Library => self.load_dep(crate_name, &json_path),
+            CrateType::Rust => self.load_rustc(crate_name, &json_path),
+        }
     }
 
-    /// Get project information
-    pub fn project_info(&self) -> ProjectInfo {
-        ProjectInfo {
-            manifest_path: self.manifest_path.clone(),
-            target_dir: self.target_dir.clone(),
-            available_crates: self.available_crates.keys().cloned().collect(),
+    pub(crate) fn load_dep(
+        &self,
+        crate_name: CrateName<'_>,
+        json_path: &Path,
+    ) -> Option<RustdocData> {
+        let mut tried_rebuilding = false;
+        let expected_version = self
+            .metadata
+            .packages
+            .iter()
+            .find(|x| **x.name == *crate_name)
+            .map(|x| x.version.to_string());
+
+        loop {
+            if let Ok(content) = std::fs::read_to_string(json_path)
+                && let Ok(RustdocVersion {
+                    format_version,
+                    crate_version,
+                }) = serde_json::from_str(&content)
+                && format_version == FORMAT_VERSION
+                && crate_version == expected_version
+            {
+                let crate_data: Crate = serde_json::from_str(&content).ok()?;
+
+                break Some(RustdocData {
+                    crate_data,
+                    name: crate_name.to_string(),
+                    crate_type: CrateType::Library,
+                });
+            } else if !tried_rebuilding {
+                tried_rebuilding = true;
+                if self.rebuild_docs(crate_name).is_ok() {
+                    continue;
+                }
+            }
+            break None;
+        }
+    }
+
+    fn load_rustc(&self, crate_name: CrateName<'_>, json_path: &Path) -> Option<RustdocData> {
+        if let Ok(content) = std::fs::read_to_string(json_path)
+            && let Ok(RustdocVersion { format_version, .. }) = serde_json::from_str(&content)
+            && format_version == FORMAT_VERSION
+        {
+            let crate_data: Crate = serde_json::from_str(&content).ok()?;
+
+            Some(RustdocData {
+                crate_data,
+                name: crate_name.to_string(),
+                crate_type: CrateType::Library,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn load_workspace(&self, crate_name: CrateName<'_>, json_path: &Path) -> Option<RustdocData> {
+        let mut tried_rebuilding = false;
+        loop {
+            let needs_rebuild = json_path
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .is_none_or(|docs_updated| {
+                    WalkDir::new(self.project_root().join("src"))
+                        .into_iter()
+                        .filter_map(|entry| -> Option<SystemTime> {
+                            entry.ok()?.metadata().ok()?.modified().ok()
+                        })
+                        .any(|file_updated| file_updated > docs_updated)
+                });
+
+            if !needs_rebuild
+                && let Ok(content) = std::fs::read_to_string(json_path)
+                && let Ok(RustdocVersion { format_version, .. }) = serde_json::from_str(&content)
+                && format_version == FORMAT_VERSION
+            {
+                let crate_data: Crate = serde_json::from_str(&content).ok()?;
+
+                break Some(RustdocData {
+                    crate_data,
+                    name: crate_name.to_string(),
+                    crate_type: CrateType::Library,
+                });
+            } else if !tried_rebuilding {
+                tried_rebuilding = true;
+                if self.rebuild_docs(crate_name).is_ok() {
+                    continue;
+                }
+            }
+            break None;
         }
     }
 }
 
-/// Information about a cargo project
+#[derive(Deserialize, Debug)]
+struct RustdocVersion {
+    format_version: u32,
+    crate_version: Option<String>,
+}
+
 #[derive(Debug, Clone)]
-pub struct ProjectInfo {
-    pub manifest_path: PathBuf,
-    pub target_dir: PathBuf,
-    pub available_crates: Vec<String>,
+pub(crate) enum CrateType {
+    Workspace,
+    Library,
+    Rust,
 }
 
 /// Wrapper around rustdoc JSON data that provides convenient query methods
-pub struct RustdocData {
+#[derive(Clone, Fieldwork)]
+#[fieldwork(get, rename_predicates)]
+pub(crate) struct RustdocData {
     crate_data: Crate,
+
+    name: String,
+
+    crate_type: CrateType,
+}
+
+impl Debug for RustdocData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RustdocData")
+            .field("name", &self.name)
+            .field("crate_type", &self.crate_type)
+            .finish()
+    }
+}
+
+impl Deref for RustdocData {
+    type Target = Crate;
+
+    fn deref(&self) -> &Self::Target {
+        &self.crate_data
+    }
 }
 
 impl RustdocData {
-    /// Load rustdoc JSON from a file path
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = std::fs::read_to_string(path)?;
-        let crate_data: Crate = serde_json::from_str(&content)?;
-        Ok(Self { crate_data })
-    }
-
-    /// Get basic crate information
-    pub fn crate_info(&self) -> CrateInfo {
-        CrateInfo {
-            format_version: self.crate_data.format_version,
-            crate_version: self.crate_data.crate_version.clone(),
-            includes_private: self.crate_data.includes_private,
-            root_id: self.crate_data.root,
-            item_count: self.crate_data.index.len(),
-            external_crates: self.crate_data.external_crates.clone(),
-        }
-    }
-
-    /// Get an item by its ID
-    pub fn get_item(&self, id: &Id) -> Option<&Item> {
-        self.crate_data.index.get(id)
-    }
-
-    /// List all items of a specific kind
-    pub fn items_by_kind(&self, kind: &str) -> Vec<(&Id, &Item)> {
-        self.crate_data
-            .index
-            .iter()
-            .filter(|(_, item)| item.inner.kind_name() == kind)
-            .collect()
-    }
-
-    /// Search items by name (case-insensitive substring match)
-    pub fn search_items(&self, query: &str) -> Vec<(&Id, &Item)> {
-        let query_lower = query.to_lowercase();
-        self.crate_data
-            .index
-            .iter()
-            .filter(|(_, item)| {
-                item.name
-                    .as_ref()
-                    .map(|name| name.to_lowercase().contains(&query_lower))
-                    .unwrap_or(false)
-            })
-            .collect()
-    }
-
-    /// Get summary statistics about item kinds
-    pub fn kind_statistics(&self) -> HashMap<String, usize> {
-        let mut stats = HashMap::new();
-        for item in self.crate_data.index.values() {
-            let kind = item.inner.kind_name().to_string();
-            *stats.entry(kind).or_insert(0) += 1;
-        }
-        stats
-    }
-
-    /// Get detailed information about struct fields by resolving their IDs
-    pub fn resolve_struct_fields(&self, field_ids: &[Option<Id>]) -> Vec<(usize, &Item)> {
-        field_ids
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, id_opt)| {
-                id_opt
-                    .as_ref()
-                    .and_then(|id| self.get_item(id).map(|item| (idx, item)))
-            })
-            .collect()
-    }
-
-    /// Get detailed information about named struct fields by resolving their IDs
-    pub fn resolve_named_struct_fields<'a>(&self, field_ids: &'a [Id]) -> Vec<(&'a Id, &Item)> {
-        field_ids
-            .iter()
-            .filter_map(|id| self.get_item(id).map(|item| (id, item)))
-            .collect()
-    }
-
-    /// Get detailed information about enum variants by resolving their IDs
-    pub fn resolve_enum_variants<'a>(&self, variant_ids: &'a [Id]) -> Vec<(&'a Id, &Item)> {
-        variant_ids
-            .iter()
-            .filter_map(|id| self.get_item(id).map(|item| (id, item)))
-            .collect()
-    }
-
-    /// Find all impl blocks for a given type ID
-    pub fn find_impls_for_type(&self, type_id: &Id) -> Vec<(&Id, &Item)> {
-        self.crate_data
-            .index
-            .iter()
-            .filter(|(_, item)| {
-                if let rustdoc_types::ItemEnum::Impl(impl_item) = &item.inner {
-                    // Check if this impl is for our target type
-                    self.type_matches_impl(type_id, impl_item)
-                } else {
-                    false
-                }
-            })
-            .collect()
-    }
-
-    /// Check if an impl block applies to a specific type
-    fn type_matches_impl(&self, type_id: &Id, impl_item: &rustdoc_types::Impl) -> bool {
-        // This is a simplified check - in practice, we'd need to resolve type paths
-        // For now, we'll check if the impl's for_ field references our type
-        self.type_references_id(&impl_item.for_, type_id)
-    }
-
-    /// Check if a type reference contains our target ID
-    fn type_references_id(&self, type_ref: &rustdoc_types::Type, target_id: &Id) -> bool {
-        match type_ref {
-            rustdoc_types::Type::ResolvedPath(path) => &path.id == target_id,
-            rustdoc_types::Type::DynTrait(dyn_trait) => dyn_trait
-                .traits
-                .iter()
-                .any(|trait_| self.path_references_id(&trait_.trait_, target_id)),
-            rustdoc_types::Type::Generic(_) => false,
-            rustdoc_types::Type::Primitive(_) => false,
-            rustdoc_types::Type::FunctionPointer(_) => false,
-            rustdoc_types::Type::Tuple(types) => {
-                types.iter().any(|t| self.type_references_id(t, target_id))
-            }
-            rustdoc_types::Type::Slice(inner) => self.type_references_id(inner, target_id),
-            rustdoc_types::Type::Array { type_, .. } => self.type_references_id(type_, target_id),
-            rustdoc_types::Type::ImplTrait(bounds) => bounds
-                .iter()
-                .any(|bound| self.bound_references_id(bound, target_id)),
-            rustdoc_types::Type::Infer => false,
-            rustdoc_types::Type::RawPointer { type_, .. } => {
-                self.type_references_id(type_, target_id)
-            }
-            rustdoc_types::Type::BorrowedRef { type_, .. } => {
-                self.type_references_id(type_, target_id)
-            }
-            rustdoc_types::Type::QualifiedPath {
-                self_type, trait_, ..
-            } => {
-                self.type_references_id(self_type, target_id)
-                    || trait_
-                        .as_ref()
-                        .is_some_and(|t| self.path_references_id(t, target_id))
-            }
-            rustdoc_types::Type::Pat { .. } => false,
-        }
-    }
-
-    /// Check if a path references our target ID
-    fn path_references_id(&self, path: &rustdoc_types::Path, target_id: &Id) -> bool {
-        &path.id == target_id
-    }
-
-    /// Check if a generic bound references our target ID
-    fn bound_references_id(&self, bound: &rustdoc_types::GenericBound, target_id: &Id) -> bool {
-        match bound {
-            rustdoc_types::GenericBound::TraitBound { trait_, .. } => {
-                self.path_references_id(trait_, target_id)
-            }
-            rustdoc_types::GenericBound::Outlives(_) => false,
-            rustdoc_types::GenericBound::Use(_) => false,
-        }
-    }
-
-    /// Resolve impl methods by getting items from impl item IDs
-    pub fn resolve_impl_methods<'a>(
-        &self,
-        impl_item: &'a rustdoc_types::Impl,
-    ) -> Vec<(&'a Id, &Item)> {
-        impl_item
-            .items
-            .iter()
-            .filter_map(|id| self.get_item(id).map(|item| (id, item)))
-            .collect()
-    }
-
-    /// Resolve trait associated items by getting items from trait item IDs
-    pub fn resolve_trait_items<'a>(&self, trait_items: &'a [Id]) -> Vec<(&'a Id, &Item)> {
-        trait_items
-            .iter()
-            .filter_map(|id| self.get_item(id).map(|item| (id, item)))
-            .collect()
-    }
-}
-
-/// Basic information about a crate
-#[derive(Debug, Clone)]
-pub struct CrateInfo {
-    pub format_version: u32,
-    pub crate_version: Option<String>,
-    pub includes_private: bool,
-    pub root_id: Id,
-    pub item_count: usize,
-    pub external_crates: HashMap<u32, rustdoc_types::ExternalCrate>,
-}
-
-/// Extension trait to get kind names from ItemEnum
-pub trait ItemKind {
-    fn kind_name(&self) -> &'static str;
-}
-
-impl ItemKind for rustdoc_types::ItemEnum {
-    fn kind_name(&self) -> &'static str {
-        match self {
-            rustdoc_types::ItemEnum::Module(_) => "module",
-            rustdoc_types::ItemEnum::ExternCrate { .. } => "extern_crate",
-            rustdoc_types::ItemEnum::Use(_) => "use",
-            rustdoc_types::ItemEnum::Union(_) => "union",
-            rustdoc_types::ItemEnum::Struct(_) => "struct",
-            rustdoc_types::ItemEnum::StructField(_) => "struct_field",
-            rustdoc_types::ItemEnum::Enum(_) => "enum",
-            rustdoc_types::ItemEnum::Variant(_) => "variant",
-            rustdoc_types::ItemEnum::Function(_) => "function",
-            rustdoc_types::ItemEnum::TypeAlias(_) => "type_alias",
-            rustdoc_types::ItemEnum::Constant { .. } => "constant",
-            rustdoc_types::ItemEnum::Trait(_) => "trait",
-            rustdoc_types::ItemEnum::TraitAlias(_) => "trait_alias",
-            rustdoc_types::ItemEnum::Impl(_) => "impl",
-            rustdoc_types::ItemEnum::Static(_) => "static",
-            rustdoc_types::ItemEnum::Macro(_) => "macro",
-            rustdoc_types::ItemEnum::ProcMacro(_) => "proc_macro",
-            rustdoc_types::ItemEnum::Primitive(_) => "primitive",
-            rustdoc_types::ItemEnum::AssocConst { .. } => "assoc_const",
-            rustdoc_types::ItemEnum::AssocType { .. } => "assoc_type",
-            rustdoc_types::ItemEnum::ExternType => "extern_type",
-        }
+    pub(crate) fn get<'a>(&'a self, request: &'a Request, id: &Id) -> Option<DocRef<'a, Item>> {
+        let item = self.crate_data.index.get(id)?;
+        Some(DocRef::new(request, self, item))
     }
 }

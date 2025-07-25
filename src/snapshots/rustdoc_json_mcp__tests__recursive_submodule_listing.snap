@@ -1,0 +1,31 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: submodule
+Kind: Module
+Visibility: Public
+Defined at: test_crate::submodule
+
+A module with items
+
+
+Structs:
+SubStruct // A struct in a submodule
+
+Enums:
+TestEnum // An enum for testing
+
+Functions:
+SubStruct::double // Double the value
+SubStruct::get_value // Get the value
+SubStruct::new // Create a new SubStruct
+sub_function // A function in a submodule
+
+Variants:
+TestEnum::VariantA // Variant A
+TestEnum::VariantB // Variant B with data
+TestEnum::VariantC // Variant C with struct data
+VariantA // Variant A
+VariantB // Variant B with data
+VariantC // Variant C with struct data

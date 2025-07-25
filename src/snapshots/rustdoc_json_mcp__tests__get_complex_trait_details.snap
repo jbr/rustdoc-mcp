@@ -1,0 +1,30 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: ComplexTrait
+Kind: Trait
+Visibility: Public
+Defined at: test_crate::ComplexTrait
+
+A more complex trait demonstrating various features
+
+
+```rust
+trait ComplexTrait<T>
+where
+    T: Clone + Send {
+    /// An associated type
+    type Output: std::fmt::Display;
+    /// An associated constant
+    const MAX_SIZE: usize = 100;
+    /// A simple method
+    fn process(&self, input: T) -> Self::Output;
+    /// A method with default implementation
+    fn is_ready(&self) -> bool { ... }
+    /// A method with complex generics
+    fn transform<U>(&self, data: U) -> Result<T, String>
+where
+    U: Into<T>;
+}
+```

@@ -1,0 +1,36 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: GenericStruct
+Kind: Struct
+Visibility: Public
+Defined at: test_crate::GenericStruct
+
+A generic struct for testing multi-paragraph documentation.
+
+This struct demonstrates how generics work with complex type bounds
+and provides a comprehensive example of the generic system in Rust.
+[+11 lines elided]
+
+
+```rust
+struct GenericStruct<T, U = String>
+where
+    T: Clone + Send,
+    U: std::fmt::Display {
+    pub data: T,
+    pub metadata: U,
+}
+```
+
+Fields:
+
+• data: T
+    Generic field
+
+• metadata: U
+    Generic field with default
+
+
+Implements: Borrow<T>, BorrowMut<T>, From<T>, Into<U>, Send, Sync, TryFrom<U>, TryInto<U>, [+5 more std traits]

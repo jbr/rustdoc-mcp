@@ -1,0 +1,11 @@
+---
+source: src/tests.rs
+expression: result
+---
+`crate::TestStruct::test_metod` not found. Did you mean one of these?
+
+• `crate::TestStruct::get_field` (Function)
+• `crate::TestStruct::new` (Function)
+• `crate::TestStruct::increment_count` (Function)
+• `crate::TestTrait` (Trait)
+• `crate::TestEnum` (Enum)

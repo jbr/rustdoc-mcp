@@ -1,0 +1,21 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: test_crate
+Kind: Module
+Visibility: Public
+Defined at: test_crate
+
+A minimal test crate for rustdoc JSON MCP testing
+
+
+Traits:
+ComplexTrait // A more complex trait demonstrating various features
+TestTrait // A trait for testing extremely long documentation that exceeds line limits. [+22 more lines]
+
+Functions:
+async_function // An async function
+generic_function // A generic function
+sub_function // A function in a submodule
+test_function // A public function

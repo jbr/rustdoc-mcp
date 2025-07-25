@@ -1,0 +1,17 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: UnitStruct
+Kind: Struct
+Visibility: Public
+Defined at: test_crate::UnitStruct
+
+A unit struct for testing
+
+
+```rust
+struct UnitStruct;
+```
+
+Implements: Borrow<T>, BorrowMut<T>, From<T>, Into<U>, Send, Sync, TryFrom<U>, TryInto<U>, [+5 more std traits]

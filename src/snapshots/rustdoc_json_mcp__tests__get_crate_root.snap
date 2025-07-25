@@ -1,0 +1,48 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: test_crate
+Kind: Module
+Visibility: Public
+Defined at: test_crate
+
+A minimal test crate for rustdoc JSON MCP testing
+
+
+Modules:
+reexport_mod
+submodule // A module with items
+
+Structs:
+GenericStruct // A generic struct for testing multi-paragraph documentation. [+14 more lines]
+SubStruct // A struct in a submodule
+TestStruct // A simple struct for testing basic functionality. [+3 more lines]
+TupleStruct // A tuple struct for testing
+UnitStruct // A unit struct for testing
+Vec // A contiguous growable array type, written as `Vec<T>`, short for 'vector'. [+257 more lines]
+
+Enums:
+GenericEnum // A generic enum for testing
+TestEnum // An enum for testing
+
+Traits:
+ComplexTrait // A more complex trait demonstrating various features
+TestTrait // A trait for testing extremely long documentation that exceeds line limits. [+22 more lines]
+
+Functions:
+async_function // An async function
+generic_function // A generic function
+sub_function // A function in a submodule
+test_function // A public function
+
+Constants:
+TEST_CONSTANT // A const for testing
+
+Statics:
+TEST_STATIC // A static for testing
+
+Variants:
+VariantA // Variant A
+VariantB // Variant B with data
+VariantC // Variant C with struct data

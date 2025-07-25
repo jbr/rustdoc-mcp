@@ -1,0 +1,17 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: test_crate
+Kind: module
+Visibility: Public
+
+A minimal test crate for rustdoc JSON MCP testing
+
+Methods:
+test_crate::TestStruct::get_field // Get the field value
+test_crate::TestStruct::increment_count // Update the count
+test_crate::TestStruct::new // Create a new TestStruct
+test_crate::submodule::SubStruct::double // Double the value
+test_crate::submodule::SubStruct::get_value // Get the value
+test_crate::submodule::SubStruct::new // Create a new SubStruct

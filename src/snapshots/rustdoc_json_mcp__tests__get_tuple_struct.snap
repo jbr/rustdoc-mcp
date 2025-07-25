@@ -1,0 +1,24 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: TupleStruct
+Kind: Struct
+Visibility: Public
+Defined at: test_crate::TupleStruct
+
+A tuple struct for testing
+
+
+```rust
+struct TupleStruct(
+    pub String, // field 0
+    // ... 1 private field hidden
+);
+```
+Fields:
+• Field 0: String
+     It's probably uncommon to add documentation for a tuple struct field
+
+
+Implements: Borrow<T>, BorrowMut<T>, From<T>, Into<U>, Send, Sync, TryFrom<U>, TryInto<U>, [+5 more std traits]

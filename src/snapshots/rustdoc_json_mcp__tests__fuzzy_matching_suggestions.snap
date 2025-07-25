@@ -1,0 +1,11 @@
+---
+source: src/tests.rs
+expression: result
+---
+`crate::TestStruct::incrementCount` not found. Did you mean one of these?
+
+• `crate::TestStruct::increment_count` (Function)
+• `crate::TestStruct::new` (Function)
+• `crate::TestStruct::ASSOCIATED_CONST` (AssocConst)
+• `crate::TestStruct::get_field` (Function)
+• `crate::TestEnum` (Enum)

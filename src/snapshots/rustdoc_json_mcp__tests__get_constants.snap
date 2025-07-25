@@ -1,0 +1,15 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: TEST_CONSTANT
+Kind: Constant
+Visibility: Public
+Defined at: test_crate::TEST_CONSTANT
+
+A const for testing
+
+
+```rust
+const TEST_CONSTANT: i32 = 42i32;
+```

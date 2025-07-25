@@ -1,0 +1,19 @@
+---
+source: src/tests.rs
+expression: result
+---
+Module: tools
+
+Items in module:
+
+pub(::tools) module set_working_directory
+
+pub(::tools) module get_item
+
+/// Set the working context path for a session
+pub struct SetWorkingDirectory
+
+/// Get detailed information about a specific item or list items in a module/crate
+pub struct GetItem
+
+pub enum Tools

@@ -1,0 +1,32 @@
+---
+source: src/tests.rs
+expression: result
+---
+Module: crate
+
+Modules:
+crate::submodule
+
+Structs:
+crate::GenericStruct
+crate::TestStruct
+crate::TupleStruct
+crate::UnitStruct
+
+Enums:
+crate::GenericEnum
+
+Traits:
+crate::ComplexTrait
+crate::TestTrait
+
+Methods:
+crate::async_function
+crate::generic_function
+crate::test_function
+
+Constants:
+crate::TEST_CONSTANT
+
+Statics:
+crate::TEST_STATIC

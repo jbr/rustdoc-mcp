@@ -1,0 +1,27 @@
+---
+source: src/tests.rs
+expression: result
+---
+Item: TestEnum
+Kind: Enum
+Visibility: Public
+Defined at: test_crate::submodule::TestEnum
+
+An enum for testing
+
+
+```rust
+enum TestEnum {
+    /// Variant A
+    VariantA,
+    /// Variant B with data
+    VariantB(String),
+    /// Variant C with struct data
+    VariantC {
+        name: String,
+        value: i32,
+    },
+}
+```
+
+Implements: Borrow<T>, BorrowMut<T>, From<T>, Into<U>, Send, Sync, TryFrom<U>, TryInto<U>, [+5 more std traits]
