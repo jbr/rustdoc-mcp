@@ -12,24 +12,6 @@ impl Display for CrateName<'_> {
     }
 }
 
-impl PartialEq<&str> for CrateName<'_> {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
-    }
-}
-impl PartialEq<&str> for &CrateName<'_> {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
-    }
-}
-
-impl<'a> TryFrom<&'a str> for CrateName<'a> {
-    type Error = ();
-    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        Self::new(value).ok_or(())
-    }
-}
-
 impl<'a> Deref for CrateName<'a> {
     type Target = str;
 
