@@ -29,13 +29,8 @@ pub(crate) struct RustdocTools {
 
 impl RustdocTools {
     /// Create a new RustdocTools instance
-    pub(crate) fn new() -> Result<Self> {
-        // Shared context store for cross-server communication (working directory)
-        let mut shared_path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        shared_path.push(".ai-tools");
-        shared_path.push("sessions");
-        shared_path.push("shared-context.json");
-        let shared_context_store = SessionStore::new(Some(shared_path))?;
+    pub(crate) fn new(storage_path: Option<PathBuf>) -> Result<Self> {
+        let shared_context_store = SessionStore::new(storage_path)?;
 
         Ok(Self {
             shared_context_store,

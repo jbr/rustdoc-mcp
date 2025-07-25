@@ -14,9 +14,17 @@ fn get_test_crate_path() -> PathBuf {
 
 /// Create a test state with isolated session
 fn create_test_state() -> RustdocTools {
-    RustdocTools::new()
+    let mut state = RustdocTools::new(None)
         .expect("Failed to create state")
-        .with_default_session_id("test")
+        .with_default_session_id("test");
+
+    SetWorkingDirectory {
+        path: get_test_crate_path().to_string_lossy().to_string(),
+    }
+    .execute(&mut state)
+    .unwrap();
+
+    state
 }
 
 #[test]
