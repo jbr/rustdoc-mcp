@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/jbr/rustdoc-mcp/compare/v0.1.1...v0.1.2) - 2025-07-26
+
+### Added
+
+- simplify and improve trait impl logic
+
+### Other
+
+- add a test for list-crates
+- split up formatting.rs
+- fix readme json
+- remove a copypasta reference to fs-mcp
+- remove unused trait impls (dead code)
+
 ## [0.1.1](https://github.com/jbr/rustdoc-mcp/compare/v0.1.0...v0.1.1) - 2025-07-25
 
 ### Other
