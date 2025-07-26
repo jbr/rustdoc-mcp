@@ -14,7 +14,7 @@ use walkdir::WalkDir;
 
 mod crate_name;
 
-use crate::doc_ref::DocRef;
+use crate::doc_ref::{self, DocRef};
 use crate::request::Request;
 use crate_name::CrateName;
 
@@ -156,11 +156,7 @@ impl RustdocProject {
             let underscored = crate_name.replace('-', "_");
             Some((
                 doc_dir.join(format!("{underscored}.json")),
-                if self
-                    .workspace_packages
-                    .iter()
-                    .any(|c| eq_ignoring_dash_underscore(c, &crate_name))
-                {
+                if self.is_workspace_package(crate_name) {
                     CrateType::Workspace
                 } else {
                     CrateType::Library
@@ -169,6 +165,12 @@ impl RustdocProject {
         } else {
             None
         }
+    }
+
+    pub(crate) fn is_workspace_package(&self, crate_name: CrateName<'_>) -> bool {
+        self.workspace_packages
+            .iter()
+            .any(|c| eq_ignoring_dash_underscore(c, &crate_name))
     }
 
     /// Generate documentation for the project or a specific package
@@ -455,5 +457,9 @@ impl RustdocData {
     pub(crate) fn get<'a>(&'a self, request: &'a Request, id: &Id) -> Option<DocRef<'a, Item>> {
         let item = self.crate_data.index.get(id)?;
         Some(DocRef::new(request, self, item))
+    }
+
+    pub(crate) fn path<'a>(&'a self, id: &Id) -> Option<doc_ref::Path<'a>> {
+        self.paths.get(id).map(|summary| summary.into())
     }
 }

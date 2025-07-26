@@ -44,4 +44,4 @@ Associated Types:
     Update the count
 
 
-Implements: TestTrait, Borrow<T>, BorrowMut<T>, Clone, Debug, From<T>, Into<U>, Send, Sync, [+9 more std traits]
+std traits: Any, Borrow<T>, BorrowMut<T>, Clone, CloneToUninit, Debug, Freeze, From<T>, Into<U>, RefUnwindSafe [+8 more]

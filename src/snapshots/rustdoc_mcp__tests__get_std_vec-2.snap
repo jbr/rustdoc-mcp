@@ -159,4 +159,4 @@ where
     Removes a key from the map, returning the stored key and value if the [+18 more lines]
 
 
-Implements: Extend<...> (2 impls), FromIterator<(K, V)>, Borrow<T>, BorrowMut<T>, Clone, Debug, Default, Eq, From<...> (2 impls), Index<&Q>, [+14 more std traits]
+std traits: Any, Borrow<T>, BorrowMut<T>, Clone, CloneToUninit, Debug, Default, Eq, Extend<(&'a K, &'a V)>, Extend<(K, V)> [+16 more]

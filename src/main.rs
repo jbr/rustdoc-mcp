@@ -6,6 +6,7 @@ mod iterators;
 mod request;
 mod rustdoc;
 mod state;
+mod string_utils;
 mod tools;
 mod traits;
 mod verbosity;
