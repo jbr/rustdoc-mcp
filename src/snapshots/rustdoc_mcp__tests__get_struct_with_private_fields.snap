@@ -33,4 +33,4 @@ Fields:
     Generic field with default
 
 
-Implements: Borrow<T>, BorrowMut<T>, From<T>, Into<U>, Send, Sync, TryFrom<U>, TryInto<U>, [+5 more std traits]
+std traits: Any, Borrow<T>, BorrowMut<T>, Freeze, From<T>, Into<U>, RefUnwindSafe, Send, Sync, TryFrom<U> [+3 more]

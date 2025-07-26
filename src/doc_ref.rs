@@ -1,6 +1,6 @@
 use crate::{request::Request, rustdoc::RustdocData};
 use fieldwork::Fieldwork;
-use rustdoc_types::{Id, Item, ItemEnum, ItemKind, MacroKind, ProcMacro};
+use rustdoc_types::{Id, Item, ItemEnum, ItemKind, ItemSummary, MacroKind, ProcMacro};
 use std::{
     fmt::{self, Debug, Display, Formatter},
     ops::Deref,
@@ -50,10 +50,7 @@ impl<'a> DocRef<'a, Item> {
     }
 
     pub(crate) fn path(&self) -> Option<Path<'a>> {
-        self.crate_docs()
-            .paths
-            .get(&self.id)
-            .map(|summary| Path(&summary.path))
+        self.crate_docs().path(&self.id)
     }
 
     pub(crate) fn kind(&self) -> ItemKind {
@@ -132,6 +129,12 @@ impl<'a, T> DocRef<'a, T> {
 }
 
 pub(crate) struct Path<'a>(&'a [String]);
+
+impl<'a> From<&'a ItemSummary> for Path<'a> {
+    fn from(value: &'a ItemSummary) -> Self {
+        Self(&value.path)
+    }
+}
 impl Display for Path<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (i, segment) in self.0.iter().enumerate() {

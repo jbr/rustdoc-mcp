@@ -227,4 +227,4 @@ where
     Creates an iterator which uses a closure to determine if an element in the range should be removed. [+72 more lines]
 
 
-Implements: DerefPure, Drop, Extend<...> (2 impls), FromIterator<T>, Receiver, ToOwned, AsMut<...> (2 impls), AsRef<...> (2 impls), Borrow<...> (2 impls), BorrowMut<...> (2 impls), Clone, Debug, Default, Deref, [+21 more std traits]
+std traits: Any, AsMut<Vec<T, A>>, AsMut<[T]>, AsRef<Vec<T, A>>, AsRef<[T]>, Borrow<T>, Borrow<[T]>, BorrowMut<T>, BorrowMut<[T]>, Clone [+50 more]

@@ -11,6 +11,12 @@ pub(crate) enum Verbosity {
     Full,
 }
 
+impl Verbosity {
+    pub(crate) fn is_full(self) -> bool {
+        matches!(self, Self::Full)
+    }
+}
+
 impl Default for Verbosity {
     fn default() -> Self {
         Self::Brief
