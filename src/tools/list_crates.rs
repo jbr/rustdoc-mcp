@@ -28,24 +28,28 @@ impl Tool<RustdocTools> for ListCrates {
         let project = state.project_context(None)?;
 
         let mut result = String::new();
-        for (crate_name, description) in project.available_crates_with_descriptions() {
-            let workspace_note = if project
-                .default_crate_name()
-                .is_some_and(|name| *name == crate_name)
-            {
-                " (aliased as \"crate\")"
-            } else if project.workspace_packages().contains(&crate_name) {
-                " (workspace)"
+        for crate_info in project.crate_info() {
+            let crate_name = crate_info.name();
+
+            let note = if crate_info.is_default_crate() {
+                " (workspace-local, aliased as \"crate\")".to_string()
+            } else if crate_info.crate_type().is_workspace() {
+                " (workspace-local)".to_string()
+            } else if let Some(version) = crate_info.version() {
+                let dev_dep_note = if crate_info.is_dev_dep() {
+                    " (dev-dep)"
+                } else {
+                    ""
+                };
+
+                format!(" {version}{dev_dep_note}")
             } else {
-                ""
+                String::new()
             };
-            if let Some(description) = description {
+            result.write_fmt(format_args!("• {crate_name}{note}\n"));
+            if let Some(description) = crate_info.description() {
                 let description = description.replace('\n', " ");
-                result.write_fmt(format_args!(
-                    "• {crate_name}{workspace_note}\n    {description}\n"
-                ));
-            } else {
-                result.write_fmt(format_args!("• {crate_name}{workspace_note}\n"));
+                result.write_fmt(format_args!("    {description}\n"));
             }
         }
 

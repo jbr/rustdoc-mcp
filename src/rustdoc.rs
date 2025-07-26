@@ -4,7 +4,6 @@ use cargo_toml::Manifest;
 use fieldwork::Fieldwork;
 use rustdoc_types::{Crate, FORMAT_VERSION, Id, Item};
 use serde::Deserialize;
-use std::collections::HashMap;
 use std::fmt::{self, Debug, Formatter};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -34,7 +33,7 @@ pub(crate) struct RustdocProject {
     target_dir: PathBuf,
     manifest: Manifest,
     metadata: Metadata,
-    descriptions: HashMap<String, String>,
+    crate_info: Vec<CrateInfo>,
     workspace_packages: Box<[String]>,
     rustc_docs: Option<(PathBuf, String)>,
 }
@@ -44,7 +43,7 @@ impl Debug for RustdocProject {
         f.debug_struct("RustdocProject")
             .field("manifest_path", &self.manifest_path)
             .field("target_dir", &self.target_dir)
-            .field("descriptions", &self.descriptions)
+            .field("crate_info", &self.crate_info)
             .finish_non_exhaustive()
     }
 }
@@ -130,12 +129,12 @@ impl RustdocProject {
             manifest,
             target_dir,
             metadata,
-            descriptions: HashMap::new(),
+            crate_info: vec![],
             workspace_packages,
             rustc_docs,
         };
 
-        project.populate_descriptions();
+        project.crate_info = project.generate_crate_info();
         Ok(project)
     }
 
@@ -198,64 +197,64 @@ impl RustdocProject {
         Ok(())
     }
 
-    fn populate_descriptions(&mut self) {
-        self.descriptions = self
-            .metadata
-            .packages
-            .iter()
-            .filter_map(|package| {
-                package
-                    .description
-                    .as_ref()
-                    .map(|description| (package.name.to_string(), description.clone()))
-            })
-            .chain(if let Some((_, rustc_version)) = self.rustc_docs() {
-                vec![
-                    ("std".to_string(), format!("The Rust Standard Library (rustc {rustc_version})")),
-                    (
-                        "alloc".to_string(),
-                        format!("The Rust core allocation and collections library (rustc {rustc_version})"),
-                    ),
-                    ("core".to_string(), format!("The Rust Core Library (rustc {rustc_version})")),
-                    (
-                        "proc_macro".to_string(),
-                        format!("A support library for macro authors when defining new macros (rustc {rustc_version})"),
-                    ),
-                    (
-                        "test".to_string(),
-                        format!("Support code for rustc's built in unit-test and micro-benchmarking framework (rustc {rustc_version})")
-                    ),
-                ]
-            } else {
-                vec![]
-            })
-            .collect();
-    }
-
     /// Get available crate names and optional descriptions
-    pub(crate) fn available_crates_with_descriptions(&self) -> Vec<(String, Option<String>)> {
-        self.manifest
-            .dependencies
-            .keys()
-            .chain(self.manifest.dev_dependencies.keys())
-            .map(|x| &**x)
-            .chain(
-                if self.rustc_docs.is_some() {
-                    RUST_CRATES.as_slice()
-                } else {
-                    [].as_slice()
-                }
-                .iter()
-                .map(|x| &**x),
-            )
-            .map(|name| (name.to_string(), self.descriptions.get(name).cloned()))
-            .chain(
-                self.metadata
-                    .workspace_packages()
+    fn generate_crate_info(&self) -> Vec<CrateInfo> {
+        let mut crates = vec![];
+        let default_crate = self.default_crate_name();
+
+        for package in self.metadata.workspace_packages() {
+            crates.push(CrateInfo {
+                crate_type: CrateType::Workspace,
+                name: package.name.to_string(),
+                description: package.description.clone(),
+                version: Some(package.version.to_string()),
+                dev_dep: false,
+                default_crate: default_crate
+                    .is_some_and(|dc| eq_ignoring_dash_underscore(&dc, &package.name)),
+            });
+        }
+
+        for (crate_names, dev_dep) in [
+            (self.manifest.dependencies.keys(), false),
+            (self.manifest.dev_dependencies.keys(), true),
+        ] {
+            for crate_name in crate_names {
+                let metadata = self
+                    .metadata
+                    .packages
                     .iter()
-                    .map(|x| (x.name.to_string(), x.description.clone())),
-            )
-            .collect()
+                    .find(|package| eq_ignoring_dash_underscore(&package.name, crate_name));
+                crates.push(CrateInfo {
+                    crate_type: CrateType::Library,
+                    version: metadata.map(|p| p.version.to_string()),
+                    description: metadata.and_then(|p| p.description.clone()),
+                    dev_dep,
+                    name: crate_name.clone(),
+                    default_crate: false,
+                });
+            }
+        }
+
+        if let Some((_, rustc_version)) = self.rustc_docs() {
+            crates.extend([
+                ("std", "The Rust Standard Library"),
+                ("alloc","The Rust core allocation and collections library"),
+                ("core", "The Rust Core Library"),
+                ("proc_macro", "A support library for macro authors when defining new macros"),
+                ("test", "Support code for rustc's built in unit-test and micro-benchmarking framework")
+            ].map(|(name, description)|{
+                CrateInfo {
+                    crate_type: CrateType::Rust,
+                    version: Some(rustc_version.to_string()),
+                    description: Some(description.to_string()),
+                    dev_dep: false,
+                    name: name.to_string(),
+                    default_crate: false
+                }})
+            );
+        }
+
+        crates
     }
 
     /// Get available crate names and optional descriptions
@@ -412,6 +411,17 @@ impl RustdocProject {
     }
 }
 
+#[derive(Debug, Fieldwork)]
+#[fieldwork(get, rename_predicates)]
+pub(crate) struct CrateInfo {
+    crate_type: CrateType,
+    version: Option<String>,
+    description: Option<String>,
+    dev_dep: bool,
+    name: String,
+    default_crate: bool,
+}
+
 #[derive(Deserialize, Debug)]
 struct RustdocVersion {
     format_version: u32,
@@ -423,6 +433,11 @@ pub(crate) enum CrateType {
     Workspace,
     Library,
     Rust,
+}
+impl CrateType {
+    pub(crate) fn is_workspace(&self) -> bool {
+        matches!(self, Self::Workspace)
+    }
 }
 
 /// Wrapper around rustdoc JSON data that provides convenient query methods
