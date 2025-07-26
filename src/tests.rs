@@ -1,7 +1,7 @@
 use crate::{
     filter::Filter,
     state::RustdocTools,
-    tools::{GetItem, SetWorkingDirectory},
+    tools::{GetItem, ListCrates, SetWorkingDirectory},
     verbosity::Verbosity,
 };
 use mcplease::traits::Tool;
@@ -28,36 +28,8 @@ fn create_test_state() -> RustdocTools {
 }
 
 #[test]
-fn test_set_working_directory() {
-    let test_crate_dir = get_test_crate_path();
-    let mut state = create_test_state();
-
-    let tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-
-    let result = tool.execute(&mut state).expect("Tool execution failed");
-
-    // Normalize the path for consistent snapshots
-    let normalized_result = result.replace(
-        &test_crate_dir.to_string_lossy().to_string(),
-        "/TEST_CRATE_ROOT",
-    );
-    insta::assert_snapshot!(normalized_result);
-}
-
-#[test]
 fn test_get_crate_root() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory first
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get the crate root
     let tool = GetItem {
@@ -72,16 +44,7 @@ fn test_get_crate_root() {
 
 #[test]
 fn test_show_docs_vs_hide_docs_comparison() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // First, get TestStruct with docs shown (default)
     let tool_with_docs = GetItem {
@@ -119,16 +82,7 @@ fn test_show_docs_vs_hide_docs_comparison() {
 
 #[test]
 fn test_verbosity_minimal() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get the crate root with documentation hidden
     let tool = GetItem {
@@ -153,16 +107,7 @@ fn test_verbosity_minimal() {
 
 #[test]
 fn test_fuzzy_matching_tool_execute() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Try to access a trait method with a typo - should find TestTrait methods
     let tool = GetItem {
@@ -176,16 +121,7 @@ fn test_fuzzy_matching_tool_execute() {
 }
 #[test]
 fn test_fuzzy_matching_trait_methods() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Try to access a trait method that should be available via impl
     // This tests whether we collect trait implementation methods
@@ -206,16 +142,7 @@ fn test_fuzzy_matching_trait_methods() {
 
 #[test]
 fn test_get_struct_details() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get TestStruct details
     let tool = GetItem {
@@ -230,16 +157,7 @@ fn test_get_struct_details() {
 
 #[test]
 fn test_get_struct_with_source() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get TestStruct details with source
     let tool = GetItem {
@@ -249,6 +167,7 @@ fn test_get_struct_with_source() {
     };
 
     let result = tool.execute(&mut state).expect("Tool execution failed");
+    let test_crate_dir = state.get_context(None).unwrap().unwrap();
 
     // Normalize project path in source output
     let normalized_result = result.replace(
@@ -260,16 +179,7 @@ fn test_get_struct_with_source() {
 
 #[test]
 fn test_get_function_details() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get test_function details with source
     let tool = GetItem {
@@ -279,6 +189,7 @@ fn test_get_function_details() {
     };
 
     let result = tool.execute(&mut state).expect("Tool execution failed");
+    let test_crate_dir = state.get_context(None).unwrap().unwrap();
 
     // Normalize project path in source output
     let normalized_result = result.replace(
@@ -290,16 +201,7 @@ fn test_get_function_details() {
 
 #[test]
 fn test_get_submodule() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get submodule listing
     let tool = GetItem {
@@ -315,16 +217,7 @@ fn test_get_submodule() {
 
 #[test]
 fn test_get_enum_details() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get TestEnum from submodule
     let tool = GetItem {
@@ -339,16 +232,7 @@ fn test_get_enum_details() {
 
 #[test]
 fn test_get_generic_struct() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get GenericStruct details
     let tool = GetItem {
@@ -363,16 +247,7 @@ fn test_get_generic_struct() {
 
 #[test]
 fn test_get_generic_function() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get generic_function details
     let tool = GetItem {
@@ -387,16 +262,7 @@ fn test_get_generic_function() {
 
 #[test]
 fn test_get_constants() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get constant
     let tool = GetItem {
@@ -411,16 +277,7 @@ fn test_get_constants() {
 
 #[test]
 fn test_get_struct_with_private_fields() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get GenericStruct to see hidden field indicator
     let tool = GetItem {
@@ -435,16 +292,7 @@ fn test_get_struct_with_private_fields() {
 
 #[test]
 fn test_fuzzy_matching_suggestions() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Try to get a non-existent item that should trigger fuzzy suggestions
     let tool = GetItem {
@@ -462,16 +310,7 @@ fn test_fuzzy_matching_suggestions() {
 }
 #[test]
 fn test_nonexistent_item() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Try to get a nonexistent item
     let tool = GetItem {
@@ -487,16 +326,7 @@ fn test_nonexistent_item() {
 
 #[test]
 fn test_get_unit_struct() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get unit struct details
     let tool = GetItem {
@@ -511,16 +341,7 @@ fn test_get_unit_struct() {
 
 #[test]
 fn test_get_tuple_struct() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get tuple struct details
     let tool = GetItem {
@@ -535,16 +356,7 @@ fn test_get_tuple_struct() {
 
 #[test]
 fn test_get_generic_enum() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get generic enum details
     let tool = GetItem {
@@ -559,16 +371,7 @@ fn test_get_generic_enum() {
 
 #[test]
 fn test_get_trait_details() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get TestTrait details
     let tool = GetItem {
@@ -583,16 +386,7 @@ fn test_get_trait_details() {
 
 #[test]
 fn test_recursive_module_listing() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get recursive listing of the crate root
     let tool = GetItem {
@@ -608,16 +402,7 @@ fn test_recursive_module_listing() {
 
 #[test]
 fn test_recursive_submodule_listing() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get recursive listing of a submodule
     let tool = GetItem {
@@ -633,16 +418,7 @@ fn test_recursive_submodule_listing() {
 
 #[test]
 fn test_recursive_filtering() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get recursive listing with struct filter only
     let tool = GetItem {
@@ -659,17 +435,7 @@ fn test_recursive_filtering() {
 
 #[test]
 fn test_non_recursive_filtering() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
-
     // Get non-recursive listing with struct filter
     let tool = GetItem {
         name: "crate".to_string(),
@@ -684,16 +450,7 @@ fn test_non_recursive_filtering() {
 
 #[test]
 fn test_recursive_multiple_filters() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get recursive listing with function and trait filters
     let tool = GetItem {
@@ -744,16 +501,7 @@ fn test_get_std_vec() {
 }
 #[test]
 fn test_get_item_with_normalized_crate_name() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory first
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get an item from the test-crate using a hyphen in the name
     let tool = GetItem {
@@ -767,16 +515,7 @@ fn test_get_item_with_normalized_crate_name() {
 }
 #[test]
 fn test_get_complex_trait_details() {
-    let test_crate_dir = get_test_crate_path();
     let mut state = create_test_state();
-
-    // Set working directory
-    let set_dir_tool = SetWorkingDirectory {
-        path: test_crate_dir.to_string_lossy().to_string(),
-    };
-    set_dir_tool
-        .execute(&mut state)
-        .expect("Failed to set working directory");
 
     // Get ComplexTrait details
     let tool = GetItem {
@@ -794,4 +533,11 @@ fn tools_doesnt_panic() {
     use crate::tools::Tools;
     use mcplease::traits::AsToolsList;
     Tools::tools_list();
+}
+
+#[test]
+fn list_crates() {
+    let mut state = create_test_state();
+    let result = ListCrates::default().execute(&mut state).unwrap();
+    insta::assert_snapshot!(result);
 }
