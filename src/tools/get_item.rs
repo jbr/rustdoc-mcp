@@ -157,20 +157,6 @@ impl WithExamples for GetItem {
 impl Tool<RustdocTools> for GetItem {
     fn execute(self, tools: &mut RustdocTools) -> Result<String> {
         let project = tools.project_context(None)?;
-
-        if self.name.is_empty() {
-            let mut result = String::new();
-            for (crate_name, description) in project.available_crates_with_descriptions() {
-                if let Some(description) = description {
-                    result.write_fmt(format_args!("{crate_name}: {description}\n"));
-                } else {
-                    result.write_fmt(format_args!("{crate_name}\n"));
-                }
-            }
-
-            return Ok(result);
-        }
-
         let request = Request::new(project);
 
         let mut suggestions = vec![];
