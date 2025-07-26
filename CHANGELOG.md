@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/jbr/rustdoc-mcp/compare/v0.1.2...v0.1.3) - 2025-07-26
+
+### Added
+
+- add versions and dev dep indicators to list-crates
+
+### Other
+
+- change log level in ci and add .claude to gitignore
+- improve user-facing docs
+
 ## [0.1.2](https://github.com/jbr/rustdoc-mcp/compare/v0.1.1...v0.1.2) - 2025-07-26
 
 ### Added
