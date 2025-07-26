@@ -14,6 +14,17 @@ use serde::{Deserialize, Serialize};
 use strum::VariantArray;
 
 /// Get detailed information about a specific item or list items in a module/crate
+///
+/// ## Usage Patterns
+/// - **Single item**: `name: "crate::MyStruct"` - Shows details for a specific type/function
+/// - **Module listing**: `name: "crate::module"` - Lists items in a module  
+/// - **Recursive exploration**: `name: "crate", recursive: true` - Shows all items in module tree
+/// - **Filtered search**: `name: "crate", filter: ["struct", "enum"]` - Shows only specified item types
+///
+/// ## Parameter Combinations
+/// - `recursive` works with `filter` to recursively show only filtered item types
+/// - `include_source` adds source code snippets to any item that has them
+/// - `verbosity` controls detail level for all output (minimal/brief/full)
 #[derive(Debug, Default, Serialize, Deserialize, JsonSchema, Args)]
 #[serde(rename = "get_item")]
 pub struct GetItem {
@@ -30,8 +41,9 @@ pub struct GetItem {
     #[arg(long, action = ArgAction::SetTrue)]
     pub recursive: Option<bool>,
 
-    /// Filter items in listing (supports: struct, enum, trait, function, constant, static, module, union, macro, type)
-    /// default: all
+    /// Filter items in listing. Supports: struct, enum, trait, function, constant, static, module, union, macro, type
+    /// Examples: `["struct"]`, `["struct", "enum"]`, `["function"]`
+    /// Default: all item types
     #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(long, value_enum)]
     pub filter: Option<Vec<Filter>>,
