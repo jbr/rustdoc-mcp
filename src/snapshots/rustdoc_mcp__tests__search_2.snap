@@ -1,0 +1,8 @@
+---
+source: src/tests.rs
+expression: result
+---
+Search results for 'generic struct' in crate 'test-crate':
+
+• test-crate::GenericStruct (Struct) - score: 23
+    A generic struct for testing multi-paragraph documentation. [+14 more lines]

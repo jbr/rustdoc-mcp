@@ -2,6 +2,7 @@ mod doc_ref;
 mod filter;
 mod format_context;
 mod indent;
+mod indexer;
 mod iterators;
 mod request;
 mod rustdoc;

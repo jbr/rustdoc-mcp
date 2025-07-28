@@ -35,6 +35,8 @@ pub(crate) struct RustdocProject {
     metadata: Metadata,
     crate_info: Vec<CrateInfo>,
     workspace_packages: Box<[String]>,
+    #[field = false]
+    available_crates: Vec<String>,
     rustc_docs: Option<(PathBuf, String)>,
 }
 
@@ -131,10 +133,16 @@ impl RustdocProject {
             metadata,
             crate_info: vec![],
             workspace_packages,
+            available_crates: vec![],
             rustc_docs,
         };
 
         project.crate_info = project.generate_crate_info();
+        project.available_crates = project
+            .crate_info
+            .iter()
+            .map(|c| c.name().to_owned())
+            .collect();
         Ok(project)
     }
 
@@ -151,7 +159,10 @@ impl RustdocProject {
                 rustc_docs.join(format!("{crate_name}.json")),
                 CrateType::Rust,
             ))
-        } else if self.available_crates().contains(&crate_name) {
+        } else if self
+            .available_crates()
+            .any(|name| eq_ignoring_dash_underscore(&name, &crate_name))
+        {
             let underscored = crate_name.replace('-', "_");
             Some((
                 doc_dir.join(format!("{underscored}.json")),
@@ -258,14 +269,10 @@ impl RustdocProject {
     }
 
     /// Get available crate names and optional descriptions
-    pub(crate) fn available_crates(&self) -> Vec<CrateName<'_>> {
-        self.manifest
-            .dependencies
-            .keys()
-            .chain(self.manifest.dev_dependencies.keys())
-            .chain(self.metadata.workspace_packages().iter().map(|x| &*x.name))
-            .filter_map(|name| CrateName::new(name))
-            .collect()
+    pub(crate) fn available_crates(&self) -> impl Iterator<Item = CrateName<'_>> {
+        self.available_crates
+            .iter()
+            .filter_map(|x| CrateName::new(x))
     }
 
     pub(crate) fn project_root(&self) -> &Path {
@@ -299,9 +306,7 @@ impl RustdocProject {
             name if name.starts_with("rustc_") => None,
             name => self
                 .available_crates()
-                .iter()
-                .find(|correct_name| eq_ignoring_dash_underscore(correct_name, name))
-                .copied(),
+                .find(|correct_name| eq_ignoring_dash_underscore(correct_name, name)),
         }
     }
 
@@ -310,16 +315,16 @@ impl RustdocProject {
         let (json_path, crate_type) = self.resolve_json_path(crate_name)?;
 
         match crate_type {
-            CrateType::Workspace => self.load_workspace(crate_name, &json_path),
-            CrateType::Library => self.load_dep(crate_name, &json_path),
-            CrateType::Rust => self.load_rustc(crate_name, &json_path),
+            CrateType::Workspace => self.load_workspace(crate_name, json_path),
+            CrateType::Library => self.load_dep(crate_name, json_path),
+            CrateType::Rust => self.load_rustc(crate_name, json_path),
         }
     }
 
     pub(crate) fn load_dep(
         &self,
         crate_name: CrateName<'_>,
-        json_path: &Path,
+        json_path: PathBuf,
     ) -> Option<RustdocData> {
         let mut tried_rebuilding = false;
         let expected_version = self
@@ -330,7 +335,7 @@ impl RustdocProject {
             .map(|x| x.version.to_string());
 
         loop {
-            if let Ok(content) = std::fs::read_to_string(json_path)
+            if let Ok(content) = std::fs::read_to_string(&json_path)
                 && let Ok(RustdocVersion {
                     format_version,
                     crate_version,
@@ -344,6 +349,7 @@ impl RustdocProject {
                     crate_data,
                     name: crate_name.to_string(),
                     crate_type: CrateType::Library,
+                    fs_path: json_path,
                 });
             } else if !tried_rebuilding {
                 tried_rebuilding = true;
@@ -355,8 +361,8 @@ impl RustdocProject {
         }
     }
 
-    fn load_rustc(&self, crate_name: CrateName<'_>, json_path: &Path) -> Option<RustdocData> {
-        if let Ok(content) = std::fs::read_to_string(json_path)
+    fn load_rustc(&self, crate_name: CrateName<'_>, json_path: PathBuf) -> Option<RustdocData> {
+        if let Ok(content) = std::fs::read_to_string(&json_path)
             && let Ok(RustdocVersion { format_version, .. }) = serde_json::from_str(&content)
             && format_version == FORMAT_VERSION
         {
@@ -366,13 +372,14 @@ impl RustdocProject {
                 crate_data,
                 name: crate_name.to_string(),
                 crate_type: CrateType::Library,
+                fs_path: json_path,
             })
         } else {
             None
         }
     }
 
-    fn load_workspace(&self, crate_name: CrateName<'_>, json_path: &Path) -> Option<RustdocData> {
+    fn load_workspace(&self, crate_name: CrateName<'_>, json_path: PathBuf) -> Option<RustdocData> {
         let mut tried_rebuilding = false;
         loop {
             let needs_rebuild = json_path
@@ -389,7 +396,7 @@ impl RustdocProject {
                 });
 
             if !needs_rebuild
-                && let Ok(content) = std::fs::read_to_string(json_path)
+                && let Ok(content) = std::fs::read_to_string(&json_path)
                 && let Ok(RustdocVersion { format_version, .. }) = serde_json::from_str(&content)
                 && format_version == FORMAT_VERSION
             {
@@ -399,6 +406,7 @@ impl RustdocProject {
                     crate_data,
                     name: crate_name.to_string(),
                     crate_type: CrateType::Library,
+                    fs_path: json_path,
                 });
             } else if !tried_rebuilding {
                 tried_rebuilding = true;
@@ -449,6 +457,8 @@ pub(crate) struct RustdocData {
     name: String,
 
     crate_type: CrateType,
+
+    fs_path: PathBuf,
 }
 
 impl Debug for RustdocData {
@@ -456,6 +466,7 @@ impl Debug for RustdocData {
         f.debug_struct("RustdocData")
             .field("name", &self.name)
             .field("crate_type", &self.crate_type)
+            .field("fs_path", &self.fs_path)
             .finish()
     }
 }

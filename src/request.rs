@@ -4,7 +4,7 @@ use crate::rustdoc::{RustdocData, RustdocProject};
 use crate::string_utils::case_aware_jaro_winkler;
 use elsa::FrozenMap;
 use fieldwork::Fieldwork;
-use rustdoc_types::Item;
+use rustdoc_types::{Id, Item, ItemEnum};
 use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Formatter;
@@ -51,16 +51,11 @@ impl Request {
         };
 
         let Some(crate_data) = self.load(crate_name) else {
-            suggestions.extend(
-                self.project
-                    .available_crates()
-                    .iter()
-                    .map(|name| Suggestion {
-                        path: name.to_string(),
-                        item: None,
-                        score: case_aware_jaro_winkler(name, crate_name),
-                    }),
-            );
+            suggestions.extend(self.project.available_crates().map(|name| Suggestion {
+                path: name.to_string(),
+                item: None,
+                score: case_aware_jaro_winkler(&name, crate_name),
+            }));
             return None;
         };
 
@@ -147,6 +142,33 @@ impl Request {
                 )
             }
         }
+    }
+
+    pub(crate) fn get_item_from_id_path<'a>(
+        &'a self,
+        crate_name: &str,
+        ids: &[u32],
+    ) -> Option<(DocRef<'a, Item>, Vec<&'a str>)> {
+        let mut path = vec![];
+        let crate_docs = self.load(crate_name)?;
+        let mut item = crate_docs.get(self, &crate_docs.root)?;
+        path.push(item.crate_docs().name());
+        for id in ids {
+            item = item.get(&Id(*id))?;
+            if let ItemEnum::Use(use_item) = item.inner() {
+                item = use_item
+                    .id
+                    .and_then(|id| item.get(&id))
+                    .or_else(|| item.request().resolve_path(&use_item.source, &mut vec![]))?;
+                if !use_item.is_glob {
+                    item.set_name(&use_item.name);
+                }
+            } else if let Some(name) = item.name() {
+                path.push(name);
+            }
+        }
+
+        Some((item, path))
     }
 }
 
