@@ -23,6 +23,7 @@ and `test`, you'll need to `rustup component add rust-docs-json`. This is option
   set-working-directory  Set the working context path for a session
   get-item               Get detailed information about a specific item or list items in a module/crate
   list-crates            List available crates in the workspace, including dependencies
+  search                 Search for items within a specific crate
 ```
 
 ## Installation
