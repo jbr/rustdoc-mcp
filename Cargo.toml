@@ -13,6 +13,7 @@ categories = []
 
 [dependencies]
 anyhow = "1.0.98"
+bincode = { version = "2.0.1", features = ["serde"] }
 cargo_metadata = "0.21.0"
 cargo_toml = "0.22.1"
 clap = { version = "4.5.41", features = ["derive"] }
@@ -22,6 +23,7 @@ env_logger = "0.11.8"
 fieldwork = "0.4.6"
 log = "0.4.27"
 mcplease = "0.2.3"
+rustc-hash = { version = "2.1.1", features = ["nightly"] }
 rustdoc-types = { version = "0.54.0", features = ["rustc-hash"] }
 schemars = { version = "1.0.4", features = ["derive"] }
 serde = { version = "1.0.219", features = ["derive"] }

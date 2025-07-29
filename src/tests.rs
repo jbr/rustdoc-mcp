@@ -1,7 +1,7 @@
 use crate::{
     filter::Filter,
     state::RustdocTools,
-    tools::{GetItem, ListCrates, SetWorkingDirectory},
+    tools::{GetItem, ListCrates, Search, SetWorkingDirectory},
     verbosity::Verbosity,
 };
 use mcplease::traits::Tool;
@@ -539,5 +539,31 @@ fn tools_doesnt_panic() {
 fn list_crates() {
     let mut state = create_test_state();
     let result = ListCrates::default().execute(&mut state).unwrap();
+    insta::assert_snapshot!(result);
+}
+
+#[test]
+fn search() {
+    let mut state = create_test_state();
+    let result = Search {
+        crate_name: "crate".into(),
+        query: "trigger line-based truncation".into(),
+        limit: None,
+    }
+    .execute(&mut state)
+    .unwrap();
+    insta::assert_snapshot!(result);
+}
+
+#[test]
+fn search_2() {
+    let mut state = create_test_state();
+    let result = Search {
+        crate_name: "crate".into(),
+        query: "generic struct".into(),
+        limit: None,
+    }
+    .execute(&mut state)
+    .unwrap();
     insta::assert_snapshot!(result);
 }

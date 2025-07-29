@@ -1,5 +1,6 @@
 use fieldwork::Fieldwork;
 use rustdoc_types::ItemKind;
+use strum::VariantArray;
 
 use crate::{filter::Filter, tools::GetItem, verbosity::Verbosity};
 
@@ -17,6 +18,17 @@ pub(crate) struct FormatContext {
     verbosity: Verbosity,
     /// Filter items by type
     filters: Vec<Filter>,
+}
+
+impl Default for FormatContext {
+    fn default() -> Self {
+        Self {
+            include_source: false,
+            recursive: false,
+            verbosity: Verbosity::Brief,
+            filters: Filter::VARIANTS.into(),
+        }
+    }
 }
 
 impl FormatContext {
