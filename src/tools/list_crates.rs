@@ -10,8 +10,11 @@ use serde::{Deserialize, Serialize};
 #[serde(rename = "list_crates")]
 /// List available crates in the workspace, including dependencies
 pub struct ListCrates {
+    /// Optional workspace member to scope dependencies to
+    #[arg(long)]
+    pub workspace_member: Option<String>,
     #[serde(skip)]
-    for_schemars: (),
+    pub for_schemars: (),
 }
 
 impl WithExamples for ListCrates {
@@ -28,7 +31,7 @@ impl Tool<RustdocTools> for ListCrates {
         let project = state.project_context(None)?;
 
         let mut result = String::new();
-        for crate_info in project.crate_info() {
+        for crate_info in project.crate_info(self.workspace_member.as_deref()) {
             let crate_name = crate_info.name();
 
             let note = if crate_info.is_default_crate() {

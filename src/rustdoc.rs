@@ -34,6 +34,7 @@ pub(crate) struct RustdocProject {
     target_dir: PathBuf,
     manifest: Manifest,
     metadata: Metadata,
+    #[field = false]
     crate_info: Vec<CrateInfo>,
     workspace_packages: Box<[String]>,
     #[field = false]
@@ -140,7 +141,7 @@ impl RustdocProject {
 
         project.crate_info = project.generate_crate_info();
         project.available_crates = project
-            .crate_info
+            .crate_info(None)
             .iter()
             .map(|c| c.name().to_owned())
             .collect();
@@ -338,6 +339,96 @@ impl RustdocProject {
                 .and_then(|p| CrateName::new(p.name.as_str()))
         }
     }
+    /// Get crate info, optionally scoped to a specific workspace member
+    pub(crate) fn crate_info(&self, member_name: Option<&str>) -> Vec<CrateInfo> {
+        if let Some(member) = member_name {
+            // Generate member-specific crate info
+            self.generate_crate_info_for_member(member)
+        } else {
+            // Use current cached crate_info (auto-detected from working directory)
+            self.crate_info.clone()
+        }
+    }
+
+    /// Generate crate info scoped to a specific workspace member
+    fn generate_crate_info_for_member(&self, member_name: &str) -> Vec<CrateInfo> {
+        let mut crates = vec![];
+        let workspace_packages = self.metadata.workspace_packages();
+
+        // Find the specified workspace member
+        let target_package = workspace_packages
+            .iter()
+            .find(|pkg| eq_ignoring_dash_underscore(&pkg.name, member_name));
+
+        if let Some(target_package) = target_package {
+            // Add all workspace members (for reference)
+            for package in &workspace_packages {
+                crates.push(CrateInfo {
+                    crate_type: CrateType::Workspace,
+                    name: package.name.to_string(),
+                    description: package.description.clone(),
+                    version: Some(package.version.to_string()),
+                    dev_dep: false,
+                    // In workspace contexts, never alias as "crate"
+                    default_crate: false,
+                });
+            }
+
+            // Collect dependencies only from the target member
+            let mut all_deps: BTreeMap<String, bool> = BTreeMap::new();
+
+            for dep in &target_package.dependencies {
+                // Skip workspace-internal dependencies
+                if dep.path.is_some() || self.workspace_packages.contains(&dep.name) {
+                    continue;
+                }
+                let is_dev_dep = matches!(dep.kind, DependencyKind::Development);
+                all_deps.entry(dep.name.clone()).or_insert(is_dev_dep);
+            }
+
+            // Convert collected dependencies to CrateInfo
+            for (crate_name, dev_dep) in all_deps {
+                let metadata = self
+                    .metadata
+                    .packages
+                    .iter()
+                    .find(|package| eq_ignoring_dash_underscore(&package.name, &crate_name));
+                crates.push(CrateInfo {
+                    crate_type: CrateType::Library,
+                    version: metadata.map(|p| p.version.to_string()),
+                    description: metadata.and_then(|p| p.description.clone()),
+                    dev_dep,
+                    name: crate_name,
+                    default_crate: false,
+                });
+            }
+        } else {
+            // Member not found, return current cached crate_info
+            return self.crate_info.clone();
+        }
+
+        // Add standard library crates
+        if let Some((_, rustc_version)) = self.rustc_docs() {
+            crates.extend([
+                ("std", "The Rust Standard Library"),
+                ("alloc","The Rust core allocation and collections library"),
+                ("core", "The Rust Core Library"),
+                ("proc_macro", "A support library for macro authors when defining new macros"),
+                ("test", "Support code for rustc's built in unit-test and micro-benchmarking framework")
+            ].map(|(name, description)|{
+                CrateInfo {
+                    crate_type: CrateType::Rust,
+                    version: Some(rustc_version.to_string()),
+                    description: Some(description.to_string()),
+                    dev_dep: false,
+                    name: name.to_string(),
+                    default_crate: false
+                }})
+            );
+        }
+
+        crates
+    }
 
     pub(crate) fn normalize_crate_name<'a>(&'a self, crate_name: &str) -> Option<CrateName<'a>> {
         match crate_name {
@@ -475,7 +566,7 @@ impl RustdocProject {
     }
 }
 
-#[derive(Debug, Fieldwork)]
+#[derive(Debug, Clone, Fieldwork)]
 #[fieldwork(get, rename_predicates)]
 pub(crate) struct CrateInfo {
     crate_type: CrateType,

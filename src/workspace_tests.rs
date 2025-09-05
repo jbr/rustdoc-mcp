@@ -51,6 +51,84 @@ fn test_workspace_list_crates_with_dependencies() {
 
     insta::assert_snapshot!(result);
 }
+#[test]
+fn test_workspace_member_parameter_crate_a() {
+    let mut state = create_workspace_test_state();
+
+    let result = ListCrates {
+        workspace_member: Some("crate-a".to_string()),
+        for_schemars: (),
+    }
+    .execute(&mut state)
+    .unwrap();
+
+    // Should show both workspace members (for reference)
+    assert!(result.contains("• crate-a (workspace-local)"));
+    assert!(result.contains("• crate-b (workspace-local)"));
+    assert!(!result.contains("aliased as \"crate\""));
+
+    // Should show crate-a's dependencies only
+    assert!(result.contains("• serde ")); // crate-a dependency
+    assert!(result.contains("• regex ")); // crate-a dependency
+    assert!(result.contains("• tempfile ") && result.contains("(dev-dep)")); // crate-a dev-dep
+
+    // Should NOT show crate-b's dependencies
+    assert!(!result.contains("• anyhow ")); // crate-b dependency
+    assert!(!result.contains("• log ")); // crate-b dependency
+    assert!(!result.contains("• env_logger ")); // crate-b dev-dep
+
+    insta::assert_snapshot!(result);
+}
+
+#[test]
+fn test_workspace_member_parameter_crate_b() {
+    let mut state = create_workspace_test_state();
+
+    let result = ListCrates {
+        workspace_member: Some("crate-b".to_string()),
+        for_schemars: (),
+    }
+    .execute(&mut state)
+    .unwrap();
+
+    // Should show both workspace members (for reference)
+    assert!(result.contains("• crate-a (workspace-local)"));
+    assert!(result.contains("• crate-b (workspace-local)"));
+    assert!(!result.contains("aliased as \"crate\""));
+
+    // Should show crate-b's dependencies only
+    assert!(result.contains("• anyhow ")); // crate-b dependency
+    assert!(result.contains("• log ")); // crate-b dependency
+    assert!(result.contains("• env_logger ") && result.contains("(dev-dep)")); // crate-b dev-dep
+
+    // Should NOT show crate-a's dependencies
+    assert!(!result.contains("• serde ")); // crate-a dependency
+    assert!(!result.contains("• regex ")); // crate-a dependency
+    assert!(!result.contains("• tempfile ")); // crate-a dev-dep
+
+    insta::assert_snapshot!(result);
+}
+
+#[test]
+fn test_workspace_member_parameter_vs_working_directory() {
+    // Test that workspace_member parameter overrides working directory context
+    let mut state = create_subcrate_test_state(); // Working in crate-a directory
+
+    let result = ListCrates {
+        workspace_member: Some("crate-b".to_string()), // But request crate-b scope
+        for_schemars: (),
+    }
+    .execute(&mut state)
+    .unwrap();
+
+    // Should show crate-b's dependencies (from parameter) not crate-a's (from working dir)
+    assert!(result.contains("• anyhow ")); // crate-b dependency
+    assert!(result.contains("• log ")); // crate-b dependency
+    assert!(!result.contains("• serde ")); // crate-a dependency (should be excluded)
+    assert!(!result.contains("• regex ")); // crate-a dependency (should be excluded)
+
+    insta::assert_snapshot!(result);
+}
 /// Create a test state with subcrate working directory (crate-b)
 fn create_subcrate_b_test_state() -> RustdocTools {
     let mut state = RustdocTools::new(None)
