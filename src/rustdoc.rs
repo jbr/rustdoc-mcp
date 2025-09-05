@@ -214,24 +214,48 @@ impl RustdocProject {
         let mut crates = vec![];
         let default_crate = self.default_crate_name();
 
-        for package in self.metadata.workspace_packages() {
+        // In workspace contexts (>1 package), never alias any crate as "crate"
+        let workspace_packages = self.metadata.workspace_packages();
+        let is_workspace = workspace_packages.len() > 1;
+
+        for package in &workspace_packages {
             crates.push(CrateInfo {
                 crate_type: CrateType::Workspace,
                 name: package.name.to_string(),
                 description: package.description.clone(),
                 version: Some(package.version.to_string()),
                 dev_dep: false,
-                default_crate: default_crate
-                    .is_some_and(|dc| eq_ignoring_dash_underscore(&dc, &package.name)),
+                default_crate: !is_workspace
+                    && default_crate
+                        .is_some_and(|dc| eq_ignoring_dash_underscore(&dc, &package.name)),
             });
         }
 
         // Collect dependencies from workspace members or current crate
         let mut all_deps: BTreeMap<String, bool> = BTreeMap::new(); // name -> is_dev_dep
 
+        // Check if we're in a subcrate context (working directory set to a specific workspace member)
+        let root_package = self.metadata.root_package();
         let workspace_packages = self.metadata.workspace_packages();
-        if workspace_packages.len() > 1 {
-            // We're in a workspace - collect dependencies from all members
+        let is_subcrate_context = root_package.is_some()
+            && workspace_packages.len() > 1
+            && root_package.map_or(false, |root| {
+                workspace_packages.iter().any(|pkg| pkg.name == root.name)
+            });
+
+        if is_subcrate_context {
+            // We're in a specific workspace member - collect dependencies from that member only
+            let root_package = root_package.unwrap();
+            for dep in &root_package.dependencies {
+                // Skip workspace-internal dependencies (relative paths or workspace members)
+                if dep.path.is_some() || self.workspace_packages.contains(&dep.name) {
+                    continue;
+                }
+                let is_dev_dep = matches!(dep.kind, DependencyKind::Development);
+                all_deps.entry(dep.name.clone()).or_insert(is_dev_dep);
+            }
+        } else if workspace_packages.len() > 1 {
+            // We're in a workspace root - collect dependencies from all members
             for package in workspace_packages {
                 for dep in &package.dependencies {
                     // Skip workspace-internal dependencies (relative paths or workspace members)
@@ -317,7 +341,14 @@ impl RustdocProject {
 
     pub(crate) fn normalize_crate_name<'a>(&'a self, crate_name: &str) -> Option<CrateName<'a>> {
         match crate_name {
-            "crate" => self.default_crate_name(),
+            "crate" => {
+                // In workspace contexts (>1 package), don't allow "crate" alias
+                if self.metadata.workspace_packages().len() > 1 {
+                    None
+                } else {
+                    self.default_crate_name()
+                }
+            }
 
             // rustdoc placeholders
             "alloc" | "alloc_crate" => Some(CrateName("alloc")),

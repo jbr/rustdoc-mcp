@@ -1,0 +1,9 @@
+---
+source: src/workspace_tests.rs
+expression: result
+---
+`crate` not found. Did you mean one of these?
+
+• `crate-a` (Crate)
+• `crate-b` (Crate)
+• `core` (Crate)

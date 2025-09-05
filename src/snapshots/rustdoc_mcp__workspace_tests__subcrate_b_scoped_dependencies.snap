@@ -12,12 +12,6 @@ expression: result
     A logging implementation for `log` which is configured via an environment variable. 
 • log 0.4.28
     A lightweight logging facade for Rust 
-• regex 1.11.2
-    An implementation of regular expressions for Rust. This implementation uses finite automata and guarantees linear time matching on all inputs. 
-• serde 1.0.219
-    A generic serialization/deserialization framework
-• tempfile 3.21.0 (dev-dep)
-    A library for managing temporary files and directories.
 • std 1.90.0-nightly
     The Rust Standard Library
 • alloc 1.90.0-nightly

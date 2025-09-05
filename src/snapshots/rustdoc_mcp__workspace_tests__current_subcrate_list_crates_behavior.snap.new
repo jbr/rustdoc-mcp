@@ -1,17 +1,12 @@
 ---
 source: src/workspace_tests.rs
+assertion_line: 81
 expression: result
 ---
-• crate-a (workspace-local)
+• crate-a (workspace-local, aliased as "crate")
     First crate in test workspace
 • crate-b (workspace-local)
     Second crate in test workspace
-• anyhow 1.0.99
-    Flexible concrete Error type built on std::error::Error
-• env_logger 0.10.2 (dev-dep)
-    A logging implementation for `log` which is configured via an environment variable. 
-• log 0.4.28
-    A lightweight logging facade for Rust 
 • regex 1.11.2
     An implementation of regular expressions for Rust. This implementation uses finite automata and guarantees linear time matching on all inputs. 
 • serde 1.0.219
