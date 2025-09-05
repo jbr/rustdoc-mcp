@@ -17,7 +17,7 @@ program. Because of this, the randomness of the seed depends on the output
 quality of the system's random number coroutine when the seed is created.
 In particular, seeds generated when the system's entropy pool is abnormally
 low such as during system boot may be of a lower quality.
-[+213 lines elided]
+[+217 lines elided]
 
 
 ```rust

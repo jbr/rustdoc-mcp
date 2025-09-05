@@ -45,6 +45,7 @@ f32 // Constants for the `f32` single-precision floating point type. [+9 more li
 f64 // Constants for the `f64` double-precision floating point type. [+9 more lines]
 ffi // Utilities related to FFI bindings. [+159 more lines]
 fmt // Utilities for formatting and printing `String`s. [+584 more lines]
+from // Unstable module containing the unstable `From` derive macro.
 fs // Filesystem manipulation operations. [+26 more lines]
 future // Asynchronous basic functionality. [+7 more lines]
 hash // Generic hashing support. [+81 more lines]
@@ -57,7 +58,7 @@ i8 // Redundant constants module for the [`i8` primitive type][i8]. [+2 more lin
 intrinsics // Compiler intrinsics. [+45 more lines]
 io // Traits, helpers, and type definitions for core I/O functionality. [+292 more lines]
 isize // Redundant constants module for the [`isize` primitive type][isize]. [+2 more lines]
-iter // Composable external iteration. [+351 more lines]
+iter // Composable external iteration. [+353 more lines]
 marker // Primitive traits and types representing basic properties of types. [+4 more lines]
 mem // Basic functions for dealing with memory. [+3 more lines]
 net // Networking primitives for TCP/UDP communication. [+19 more lines]
@@ -91,8 +92,8 @@ u64 // Redundant constants module for the [`u64` primitive type][u64]. [+2 more 
 u8 // Redundant constants module for the [`u8` primitive type][u8]. [+2 more lines]
 unsafe_binder // Operators used to turn types into unsafe binders and back.
 usize // Redundant constants module for the [`usize` primitive type][usize]. [+2 more lines]
-vec // A contiguous growable array type with heap-allocated contents, written [+51 more lines]
-vec // A contiguous growable array type with heap-allocated contents, written [+51 more lines]
+vec // A contiguous growable array type with heap-allocated contents, written [+71 more lines]
+vec // A contiguous growable array type with heap-allocated contents, written [+71 more lines]
 
 Macros:
 format // Creates a `String` using interpolation of runtime expressions. [+42 more lines]

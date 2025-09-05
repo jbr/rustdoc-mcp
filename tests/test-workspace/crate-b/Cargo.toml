@@ -1,0 +1,13 @@
+[package]
+name = "crate-b"
+version = "0.1.0"
+edition = "2021"
+description = "Second crate in test workspace"
+
+[dependencies]
+anyhow = { workspace = true }
+log = "0.4"
+crate-a = { path = "../crate-a" }
+
+[dev-dependencies]
+env_logger = "0.10"
