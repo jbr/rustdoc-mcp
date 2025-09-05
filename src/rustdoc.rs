@@ -142,7 +142,6 @@ impl RustdocProject {
         project.crate_info = project.generate_crate_info();
         project.available_crates = project
             .crate_info(None)
-            .iter()
             .map(|c| c.name().to_owned())
             .collect();
         Ok(project)
@@ -211,6 +210,7 @@ impl RustdocProject {
     }
 
     /// Get available crate names and optional descriptions
+    /// Always generates full workspace view with used_by tracking
     fn generate_crate_info(&self) -> Vec<CrateInfo> {
         let mut crates = vec![];
         let default_crate = self.default_crate_name();
@@ -219,6 +219,7 @@ impl RustdocProject {
         let workspace_packages = self.metadata.workspace_packages();
         let is_workspace = workspace_packages.len() > 1;
 
+        // Add workspace members
         for package in &workspace_packages {
             crates.push(CrateInfo {
                 crate_type: CrateType::Workspace,
@@ -229,73 +230,76 @@ impl RustdocProject {
                 default_crate: !is_workspace
                     && default_crate
                         .is_some_and(|dc| eq_ignoring_dash_underscore(&dc, &package.name)),
+                used_by: vec![], // Workspace members aren't "used by" anyone
             });
         }
 
-        // Collect dependencies from workspace members or current crate
-        let mut all_deps: BTreeMap<String, bool> = BTreeMap::new(); // name -> is_dev_dep
+        // Collect all dependencies with tracking of which workspace members use them
+        let mut dep_usage: BTreeMap<String, Vec<String>> = BTreeMap::new(); // dep_name -> vec of workspace members
+        let mut dep_dev_status: BTreeMap<String, bool> = BTreeMap::new(); // dep_name -> is any usage a dev dep
 
-        // Check if we're in a subcrate context (working directory set to a specific workspace member)
-        let root_package = self.metadata.root_package();
-        let workspace_packages = self.metadata.workspace_packages();
-        let is_subcrate_context = root_package.is_some()
-            && workspace_packages.len() > 1
-            && root_package.map_or(false, |root| {
-                workspace_packages.iter().any(|pkg| pkg.name == root.name)
-            });
-
-        if is_subcrate_context {
-            // We're in a specific workspace member - collect dependencies from that member only
-            let root_package = root_package.unwrap();
-            for dep in &root_package.dependencies {
-                // Skip workspace-internal dependencies (relative paths or workspace members)
-                if dep.path.is_some() || self.workspace_packages.contains(&dep.name) {
-                    continue;
-                }
-                let is_dev_dep = matches!(dep.kind, DependencyKind::Development);
-                all_deps.entry(dep.name.clone()).or_insert(is_dev_dep);
-            }
-        } else if workspace_packages.len() > 1 {
-            // We're in a workspace root - collect dependencies from all members
-            for package in workspace_packages {
+        if workspace_packages.len() > 1 {
+            // Multi-crate workspace - collect from all members
+            for package in &workspace_packages {
                 for dep in &package.dependencies {
-                    // Skip workspace-internal dependencies (relative paths or workspace members)
+                    // Skip workspace-internal dependencies
                     if dep.path.is_some() || self.workspace_packages.contains(&dep.name) {
                         continue;
                     }
+
                     let is_dev_dep = matches!(dep.kind, DependencyKind::Development);
-                    all_deps.entry(dep.name.clone()).or_insert(is_dev_dep);
+                    dep_usage
+                        .entry(dep.name.clone())
+                        .or_default()
+                        .push(package.name.to_string());
+
+                    // Mark as dev_dep if ANY usage is dev (we could be more nuanced here)
+                    let current_dev_status =
+                        dep_dev_status.get(&dep.name).copied().unwrap_or(false);
+                    dep_dev_status.insert(dep.name.clone(), current_dev_status || is_dev_dep);
                 }
             }
         } else {
-            // Single crate - use manifest dependencies as before
+            // Single crate - use manifest dependencies
+            let single_crate_name = workspace_packages
+                .first()
+                .map(|p| p.name.to_string())
+                .unwrap_or_default();
             for (crate_names, dev_dep) in [
                 (self.manifest.dependencies.keys(), false),
                 (self.manifest.dev_dependencies.keys(), true),
             ] {
                 for crate_name in crate_names {
-                    all_deps.insert(crate_name.clone(), dev_dep);
+                    dep_usage
+                        .entry(crate_name.clone())
+                        .or_default()
+                        .push(single_crate_name.clone());
+                    dep_dev_status.insert(crate_name.clone(), dev_dep);
                 }
             }
         }
 
-        // Convert collected dependencies to CrateInfo
-        for (crate_name, dev_dep) in all_deps {
+        // Convert dependencies to CrateInfo with used_by tracking
+        for (dep_name, using_crates) in dep_usage {
+            let dev_dep = dep_dev_status.get(&dep_name).copied().unwrap_or(false);
             let metadata = self
                 .metadata
                 .packages
                 .iter()
-                .find(|package| eq_ignoring_dash_underscore(&package.name, &crate_name));
+                .find(|package| eq_ignoring_dash_underscore(&package.name, &dep_name));
+
             crates.push(CrateInfo {
                 crate_type: CrateType::Library,
                 version: metadata.map(|p| p.version.to_string()),
                 description: metadata.and_then(|p| p.description.clone()),
                 dev_dep,
-                name: crate_name,
+                name: dep_name,
                 default_crate: false,
+                used_by: using_crates,
             });
         }
 
+        // Add standard library crates
         if let Some((_, rustc_version)) = self.rustc_docs() {
             crates.extend([
                 ("std", "The Rust Standard Library"),
@@ -310,7 +314,8 @@ impl RustdocProject {
                     description: Some(description.to_string()),
                     dev_dep: false,
                     name: name.to_string(),
-                    default_crate: false
+                    default_crate: false,
+                    used_by: vec![], // Standard library not tracked by workspace usage
                 }})
             );
         }
@@ -340,94 +345,41 @@ impl RustdocProject {
         }
     }
     /// Get crate info, optionally scoped to a specific workspace member
-    pub(crate) fn crate_info(&self, member_name: Option<&str>) -> Vec<CrateInfo> {
-        if let Some(member) = member_name {
-            // Generate member-specific crate info
-            self.generate_crate_info_for_member(member)
-        } else {
-            // Use current cached crate_info (auto-detected from working directory)
-            self.crate_info.clone()
-        }
+    pub(crate) fn crate_info<'a>(
+        &'a self,
+        member_name: Option<&str>,
+    ) -> impl Iterator<Item = &'a CrateInfo> {
+        let filter_member = member_name.or_else(|| self.detect_subcrate_context());
+        let member_string = filter_member.map(|s| s.to_string());
+
+        self.crate_info.iter().filter(move |info| {
+            match &member_string {
+                Some(member) => {
+                    // Include: workspace members + deps used by this member + standard library
+                    info.crate_type().is_workspace()
+                        || info.used_by().contains(member)
+                        || matches!(info.crate_type(), CrateType::Rust)
+                }
+                None => true, // Include all for workspace view
+            }
+        })
     }
 
-    /// Generate crate info scoped to a specific workspace member
-    fn generate_crate_info_for_member(&self, member_name: &str) -> Vec<CrateInfo> {
-        let mut crates = vec![];
+    /// Detect if we're in a subcrate context based on working directory
+    pub(crate) fn detect_subcrate_context(&self) -> Option<&str> {
+        let root_package = self.metadata.root_package()?;
         let workspace_packages = self.metadata.workspace_packages();
 
-        // Find the specified workspace member
-        let target_package = workspace_packages
-            .iter()
-            .find(|pkg| eq_ignoring_dash_underscore(&pkg.name, member_name));
-
-        if let Some(target_package) = target_package {
-            // Add all workspace members (for reference)
-            for package in &workspace_packages {
-                crates.push(CrateInfo {
-                    crate_type: CrateType::Workspace,
-                    name: package.name.to_string(),
-                    description: package.description.clone(),
-                    version: Some(package.version.to_string()),
-                    dev_dep: false,
-                    // In workspace contexts, never alias as "crate"
-                    default_crate: false,
-                });
-            }
-
-            // Collect dependencies only from the target member
-            let mut all_deps: BTreeMap<String, bool> = BTreeMap::new();
-
-            for dep in &target_package.dependencies {
-                // Skip workspace-internal dependencies
-                if dep.path.is_some() || self.workspace_packages.contains(&dep.name) {
-                    continue;
-                }
-                let is_dev_dep = matches!(dep.kind, DependencyKind::Development);
-                all_deps.entry(dep.name.clone()).or_insert(is_dev_dep);
-            }
-
-            // Convert collected dependencies to CrateInfo
-            for (crate_name, dev_dep) in all_deps {
-                let metadata = self
-                    .metadata
-                    .packages
-                    .iter()
-                    .find(|package| eq_ignoring_dash_underscore(&package.name, &crate_name));
-                crates.push(CrateInfo {
-                    crate_type: CrateType::Library,
-                    version: metadata.map(|p| p.version.to_string()),
-                    description: metadata.and_then(|p| p.description.clone()),
-                    dev_dep,
-                    name: crate_name,
-                    default_crate: false,
-                });
-            }
+        // Check if we're in a subcrate context (working directory set to a specific workspace member)
+        if workspace_packages.len() > 1
+            && workspace_packages
+                .iter()
+                .any(|pkg| pkg.name == root_package.name)
+        {
+            Some(&root_package.name)
         } else {
-            // Member not found, return current cached crate_info
-            return self.crate_info.clone();
+            None
         }
-
-        // Add standard library crates
-        if let Some((_, rustc_version)) = self.rustc_docs() {
-            crates.extend([
-                ("std", "The Rust Standard Library"),
-                ("alloc","The Rust core allocation and collections library"),
-                ("core", "The Rust Core Library"),
-                ("proc_macro", "A support library for macro authors when defining new macros"),
-                ("test", "Support code for rustc's built in unit-test and micro-benchmarking framework")
-            ].map(|(name, description)|{
-                CrateInfo {
-                    crate_type: CrateType::Rust,
-                    version: Some(rustc_version.to_string()),
-                    description: Some(description.to_string()),
-                    dev_dep: false,
-                    name: name.to_string(),
-                    default_crate: false
-                }})
-            );
-        }
-
-        crates
     }
 
     pub(crate) fn normalize_crate_name<'a>(&'a self, crate_name: &str) -> Option<CrateName<'a>> {
@@ -575,6 +527,7 @@ pub(crate) struct CrateInfo {
     dev_dep: bool,
     name: String,
     default_crate: bool,
+    used_by: Vec<String>,
 }
 
 #[derive(Deserialize, Debug)]

@@ -6,17 +6,17 @@ expression: result
     First crate in test workspace
 • crate-b (workspace-local)
     Second crate in test workspace
-• anyhow 1.0.99
+• anyhow 1.0.99 (crate-b)
     Flexible concrete Error type built on std::error::Error
-• env_logger 0.10.2 (dev-dep)
+• env_logger 0.10.2 (dev-dep) (crate-b dev)
     A logging implementation for `log` which is configured via an environment variable. 
-• log 0.4.28
+• log 0.4.28 (crate-b)
     A lightweight logging facade for Rust 
-• regex 1.11.2
+• regex 1.11.2 (crate-a)
     An implementation of regular expressions for Rust. This implementation uses finite automata and guarantees linear time matching on all inputs. 
-• serde 1.0.219
+• serde 1.0.219 (crate-a)
     A generic serialization/deserialization framework
-• tempfile 3.21.0 (dev-dep)
+• tempfile 3.21.0 (dev-dep) (crate-a dev)
     A library for managing temporary files and directories.
 • std 1.90.0-nightly
     The Rust Standard Library
