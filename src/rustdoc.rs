@@ -1,9 +1,10 @@
 use anyhow::{Result, anyhow};
-use cargo_metadata::{Metadata, MetadataCommand};
+use cargo_metadata::{DependencyKind, Metadata, MetadataCommand};
 use cargo_toml::Manifest;
 use fieldwork::Fieldwork;
 use rustdoc_types::{Crate, FORMAT_VERSION, Id, Item};
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -225,25 +226,49 @@ impl RustdocProject {
             });
         }
 
-        for (crate_names, dev_dep) in [
-            (self.manifest.dependencies.keys(), false),
-            (self.manifest.dev_dependencies.keys(), true),
-        ] {
-            for crate_name in crate_names {
-                let metadata = self
-                    .metadata
-                    .packages
-                    .iter()
-                    .find(|package| eq_ignoring_dash_underscore(&package.name, crate_name));
-                crates.push(CrateInfo {
-                    crate_type: CrateType::Library,
-                    version: metadata.map(|p| p.version.to_string()),
-                    description: metadata.and_then(|p| p.description.clone()),
-                    dev_dep,
-                    name: crate_name.clone(),
-                    default_crate: false,
-                });
+        // Collect dependencies from workspace members or current crate
+        let mut all_deps: BTreeMap<String, bool> = BTreeMap::new(); // name -> is_dev_dep
+
+        let workspace_packages = self.metadata.workspace_packages();
+        if workspace_packages.len() > 1 {
+            // We're in a workspace - collect dependencies from all members
+            for package in workspace_packages {
+                for dep in &package.dependencies {
+                    // Skip workspace-internal dependencies (relative paths or workspace members)
+                    if dep.path.is_some() || self.workspace_packages.contains(&dep.name) {
+                        continue;
+                    }
+                    let is_dev_dep = matches!(dep.kind, DependencyKind::Development);
+                    all_deps.entry(dep.name.clone()).or_insert(is_dev_dep);
+                }
             }
+        } else {
+            // Single crate - use manifest dependencies as before
+            for (crate_names, dev_dep) in [
+                (self.manifest.dependencies.keys(), false),
+                (self.manifest.dev_dependencies.keys(), true),
+            ] {
+                for crate_name in crate_names {
+                    all_deps.insert(crate_name.clone(), dev_dep);
+                }
+            }
+        }
+
+        // Convert collected dependencies to CrateInfo
+        for (crate_name, dev_dep) in all_deps {
+            let metadata = self
+                .metadata
+                .packages
+                .iter()
+                .find(|package| eq_ignoring_dash_underscore(&package.name, &crate_name));
+            crates.push(CrateInfo {
+                crate_type: CrateType::Library,
+                version: metadata.map(|p| p.version.to_string()),
+                description: metadata.and_then(|p| p.description.clone()),
+                dev_dep,
+                name: crate_name,
+                default_crate: false,
+            });
         }
 
         if let Some((_, rustc_version)) = self.rustc_docs() {

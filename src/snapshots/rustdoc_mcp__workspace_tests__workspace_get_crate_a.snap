@@ -1,0 +1,14 @@
+---
+source: src/workspace_tests.rs
+expression: result
+---
+Item: crate_a
+Kind: Module
+Visibility: Public
+Defined at: crate_a
+
+Structs:
+CrateAStruct
+
+Functions:
+process_data

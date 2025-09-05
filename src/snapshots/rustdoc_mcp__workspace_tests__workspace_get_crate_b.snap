@@ -1,0 +1,11 @@
+---
+source: src/workspace_tests.rs
+expression: result
+---
+Item: crate_b
+Kind: Module
+Visibility: Public
+Defined at: crate_b
+
+Structs:
+CrateBProcessor

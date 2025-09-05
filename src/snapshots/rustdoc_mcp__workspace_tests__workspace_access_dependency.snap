@@ -1,0 +1,25 @@
+---
+source: src/workspace_tests.rs
+expression: result
+---
+Item: serde
+Kind: Module
+Visibility: Public
+Defined at: serde
+
+# Serde
+
+Serde is a framework for ***ser***ializing and ***de***serializing Rust data
+structures efficiently and generically.
+[+89 lines elided]
+
+
+Modules:
+de // Generic data structure deserialization framework. [+112 more lines]
+ser // Generic data structure serialization framework. [+107 more lines]
+
+Traits:
+Deserialize // A **data structure** that can be deserialized from any data format supported [+30 more lines]
+Deserializer // A **data format** that can deserialize any data structure supported by [+107 more lines]
+Serialize // A **data structure** that can be serialized into any data format supported [+24 more lines]
+Serializer // A **data format** that can serialize any data structure supported by Serde. [+76 more lines]
