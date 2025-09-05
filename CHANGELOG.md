@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4](https://github.com/jbr/rustdoc-mcp/compare/v0.1.3...v0.1.4) - 2025-09-05
+
+### Added
+
+- upgrade nightly version
+- *(workspaces)* show which dependencies are used by which workspace crates
+- *(workspaces)* list_crates accepts a workspace_member argument
+- *(workspaces)* scoping by setting working directory within a subcrate
+- *(workspaces)* initial workspace support
+- add search
+
+### Other
+
+- Merge pull request #9 from jbr/release-plz-2025-07-26T19-03-36Z
+- add search to readme
+
 ## [0.1.3](https://github.com/jbr/rustdoc-mcp/compare/v0.1.2...v0.1.3) - 2025-07-26
 
 ### Added
