@@ -20,6 +20,7 @@
 mod app_page;
 mod caching;
 mod crawlers;
+mod header_census;
 #[cfg(feature = "mcp")]
 mod mcp;
 mod og;
@@ -420,6 +421,7 @@ async fn reject_other_methods(conn: Conn) -> Conn {
 pub(crate) fn handler(crate_search: Arc<CrateSearchService>) -> impl Handler {
     (
         ConnId::new().without_request_header(),
+        header_census::HeaderCensus::from_env(),
         Logger::new()
             .with_formatter(log_format!(
                 "[{conn_id}] <- {ip} {version} {method} {host}{url} {response_time} {status} \
