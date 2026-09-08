@@ -45,9 +45,9 @@ ferritin-common = { path = "../ferritin-common", version = "0.18.0" }
 clap = { version = "4.6.6", features = ["derive", "cargo", "env"] }
 crossbeam-channel = "0.5"
 crossterm = "0.29"
-fieldwork = "0.5.3"
-log = "0.4.34"
-env_logger = "0.11.11"
+fieldwork = "0.5"
+log = "0.4"
+env_logger = "0.11"
 pulldown-cmark = "0.13"
 ratatui = "0.30"
 regex = "1.13"
@@ -83,21 +83,21 @@ resvg = { version = "0.48.1", optional = true, default-features = false, feature
 trillium = { version = "1.4.0", optional = true }
 # `webpki-roots` is required for `AcmeConfig::new` (the ACME client needs roots
 # to trust Let's Encrypt's directory endpoint).
-trillium-acme = { version = "0.9.0", features = ["webpki-roots"], optional = true }
-trillium-caching-headers = { version = "0.4.3", optional = true }
-trillium-client = { version = "0.9.18", optional = true }
-trillium-compression = { version = "0.3.4", features = ["client"], optional = true }
-trillium-frontend = { version = "0.4.3", optional = true }
-trillium-logger = { version = "0.5.5", features = ["client"], optional = true }
-trillium-redirect = { version = "0.3.0", features = ["client"], optional = true }
-trillium-quinn = { version = "0.1.7", optional = true }
+trillium-acme = { version = "0.9", features = ["webpki-roots"], optional = true }
+trillium-caching-headers = { version = "0.4", optional = true }
+trillium-client = { version = "0.9", optional = true }
+trillium-compression = { version = "0.3", features = ["client"], optional = true }
+trillium-frontend = { version = "0.4", optional = true }
+trillium-logger = { version = "0.5", features = ["client"], optional = true }
+trillium-redirect = { version = "0.3", features = ["client"], optional = true }
+trillium-quinn = { version = "0.1", optional = true }
 trillium-ratelimit = { version = "0.0.2", optional = true }
-trillium-router = { version = "0.5.3", optional = true }
-trillium-rustls = { version = "0.11.3", optional = true }
-trillium-smol = { version = "0.7.0", optional = true }
-trillium-head = { version = "0.3.0", optional = true }
-trillium-html-rewriter = { version = "0.6.1", optional = true }
-trillium-conn-id = { version = "0.3.0", optional = true }
+trillium-router = { version = "0.5", optional = true }
+trillium-rustls = { version = "0.11", optional = true }
+trillium-smol = { version = "0.7", optional = true }
+trillium-head = { version = "0.3", optional = true }
+trillium-html-rewriter = { version = "0.6", optional = true }
+trillium-conn-id = { version = "0.3", optional = true }
 
 [build-dependencies]
 syntect = { version = "5.3", default-features = false, features = ["parsing", "plist-load", "dump-load", "dump-create", "regex-onig"] }
